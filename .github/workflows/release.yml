@@ -1,0 +1,42 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Extract Version Number
+        id: extract
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "ver=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if Pre-Release
+        id: check-prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-"* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
+          generate_release_notes: true
+          body: |
+           Jonquil - Release ${{ steps.extract.outputs.ver }}
+            
+            _Automated release notes below._

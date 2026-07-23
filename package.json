@@ -1,0 +1,23 @@
+{
+  "name": "jonquil",
+  "version": "1.0.0",
+  "description": "Autonomous AI agent core. Platform-agnostic intelligence for the Jonquil Ecosystem.",
+  "main": "index.js",
+  "workspaces": [
+    "core",
+    "gateways/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "release": "commit-and-tag-version",
+    "dev:core": "npm run dev --workspace=core",
+    "dev:wa": "npm run dev --workspace=gateways/whatsapp"
+  },
+  "keywords": [],
+  "author": "The Jonquil AI Authors",
+  "license": "MIT",
+  "devDependencies": {
+    "commit-and-tag-version": "^13.1.0"
+  }
+}
