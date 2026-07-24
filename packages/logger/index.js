@@ -48,6 +48,7 @@ const logger = {
     },
 
     info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args),
+    debug: (cat, msg, ...args) => logger._print(cat, colors.magenta, msg, args),
     success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args),
     warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args),
     error: (cat, msg, ...args) => {
@@ -58,6 +59,7 @@ const logger = {
     with: (contextObj) => {
         return {
             info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args, contextObj),
+            debug: (cat, msg, ...args) => logger._print(cat, colors.magenta, msg, args, contextObj),
             success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args, contextObj),
             warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args, contextObj),
             error: (cat, msg, ...args) => logger._print(cat, colors.red, msg, args, contextObj),
