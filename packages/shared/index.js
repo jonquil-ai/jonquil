@@ -4,7 +4,7 @@
  * to the CORE (Jonquil) service.
  */
 class UniversalMessage {
-    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, quotedMessage = null }) {
+    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, quotedMessage = null, mentions = [], timestamp = null }) {
         this.platform = platform;
         this.messageId = messageId;
         this.chatId = chatId;
@@ -15,15 +15,15 @@ class UniversalMessage {
         this.hasMedia = hasMedia;
         this.quotedMessage = quotedMessage;
         this.mentions = mentions;
-        this.timestamp = timestamp || new Date().toISOString(); 
+        this.timestamp = timestamp || new Date().toISOString();
     }
     isEmpty() { return !this.text && !this.hasMedia; }
 }
 
 class UniversalResponse {
     constructor({ text = null, actions = [] }) {
-        this.text = text; 
-        this.actions = actions; 
+        this.text = text;
+        this.actions = actions;
     }
 }
 
@@ -44,7 +44,7 @@ class CoreClient {
             });
 
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
+
             const data = await response.json();
             return new UniversalResponse(data.reply);
         } catch (error) {
