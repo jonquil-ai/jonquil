@@ -14,6 +14,8 @@ class UniversalMessage {
         this.text = text || "";
         this.hasMedia = hasMedia;
         this.quotedMessage = quotedMessage;
+        this.mentions = mentions;
+        this.timestamp = timestamp || new Date().toISOString(); 
     }
     isEmpty() { return !this.text && !this.hasMedia; }
 }
