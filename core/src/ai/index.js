@@ -4,6 +4,8 @@ const logger = require('@jonquil-ai/logger');
 const { UniversalResponse } = require('@jonquil-ai/shared');
 const { getSchemasForPlatform, executeCapability } = require('../tools');
 const activeProvider = require('./providers/gemini');
+const { getSessionHistory, saveToSession } = require('./memory');
+
 
 const maxLogLength = process.env.MAX_LOG_LENGTH;
 
@@ -44,8 +46,11 @@ async function handleMessageWithAI(universalMessage) {
     const systemInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n[Current Platform]: ${universalMessage.platform}\n[Current Time]: ${timeStr}`;
     const userPrompt = `[Environment: ${chatType}]\n[Username: ${universalMessage.senderName}]${quoteContext}\n[Message]: ${universalMessage.text}`;
 
+    const sessionHistory = getSessionHistory(universalMessage.chatId);
+
     const history = [
         { role: "system", content: systemInstruction },
+        ...sessionHistory,
         { role: "user", content: userPrompt }
     ];
 
@@ -70,6 +75,8 @@ async function handleMessageWithAI(universalMessage) {
             }
 
             log.success('AI', `Jonquil Response: ${text.substring(0, maxLogLength).replace(/\n/g, ' ')}`);
+            
+            saveToSession(universalMessage.chatId, userPrompt, text);
             
             return new UniversalResponse({
                 text: text,
