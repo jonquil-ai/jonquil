@@ -4,17 +4,7 @@
  * to the CORE (Jonquil) service.
  */
 class UniversalMessage {
-    constructor({
-        platform,            // 'whatsapp', 'telegram', etc.
-        messageId,           // platform's original message ID
-        chatId,              // Group or DM ID
-        senderId,            // sender's normalized number/ID
-        senderName,          // sender's display name
-        isGroup,             // is group message?
-        text,                // content of the message (including media captions)
-        hasMedia = false,    // is there any media?
-        quotedMessage = null // the message being replied to (its content and ID, if any)
-    }) {
+    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, quotedMessage = null }) {
         this.platform = platform;
         this.messageId = messageId;
         this.chatId = chatId;
@@ -25,12 +15,14 @@ class UniversalMessage {
         this.hasMedia = hasMedia;
         this.quotedMessage = quotedMessage;
     }
+    isEmpty() { return !this.text && !this.hasMedia; }
+}
 
-    isEmpty() {
-        return !this.text && !this.hasMedia;
+class UniversalResponse {
+    constructor({ text = null, actions = [] }) {
+        this.text = text; 
+        this.actions = actions; 
     }
 }
 
-module.exports = {
-    UniversalMessage
-};
+module.exports = { UniversalMessage, UniversalResponse };

@@ -2,6 +2,8 @@ const axios = require('axios');
 const logger = require('@jonquil-ai/logger');
 
 module.exports = {
+    category: 'tool',
+    platforms: ['all'],
     schema: {
         name: "get_weather",
         description: "It retrieves real-time weather data for a specified location. Always use this when a user asks about the weather.",
@@ -22,10 +24,10 @@ module.exports = {
         try {
             const url = `https://wttr.in/${encodeURIComponent(args.location)}?format=j1&lang=tr`;
             const response = await axios.get(url);
-            
+
             const current = response.data.current_condition[0];
             const area = response.data.nearest_area[0];
-            
+
             return {
                 success: true,
                 data: {
