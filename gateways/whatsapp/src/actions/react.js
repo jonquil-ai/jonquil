@@ -1,6 +1,6 @@
 module.exports = {
     name: 'react',
-    execute: async (payload, { sock, universalMsg, logger }) => {
+    execute: async (payload, { sock, universalMsg, log }) => {
         try {
             await sock.sendMessage(universalMsg.chatId, {
                 react: {
@@ -12,9 +12,9 @@ module.exports = {
                     }
                 }
             });
-            logger.success('WA_ACTION.react', `Reaction sent: ${payload.emoji}`);
+            log.success('ACTION', `react: ${payload.emoji}`);
         } catch (error) {
-            logger.error('WA_ACTION.react', 'Error:', error.message);
+            log.error('ACTION', 'react', error.message);
         }
     }
 };

@@ -5,6 +5,7 @@ const activeProvider = require('./providers/gemini');
 
 async function handleMessageWithAI(universalMessage) {
 
+    const log = logger.with(universalMessage);
     const availableSchemas = getSchemasForPlatform(universalMessage.platform);
 
     const userPrompt = `[Username: ${universalMessage.senderName}]: ${universalMessage.text}`;
@@ -17,7 +18,7 @@ async function handleMessageWithAI(universalMessage) {
         { role: "user", content: userPrompt }
     ];
 
-    logger.info('AI', `Jonquil düşünüyor... Platform: ${universalMessage.platform}`);
+    log.info('AI', `Incoming: ${universalMessage.text.substring(0, 50)}`);
 
     let loopCount = 0;
     const MAX_LOOPS = 3;
@@ -28,7 +29,7 @@ async function handleMessageWithAI(universalMessage) {
         const aiResponse = await activeProvider.generate(history, availableSchemas);
 
         if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
-            logger.success('AI', `Jonquil response: ${aiResponse.text.substring(0, 50)}...`);
+            log.success('AI', `Jonquil response: ${aiResponse.text.substring(0, 50)}...`);
 
             return new UniversalResponse({
                 text: aiResponse.text,
@@ -40,7 +41,7 @@ async function handleMessageWithAI(universalMessage) {
             history.push({ role: 'assistant', toolCalls: aiResponse.toolCalls });
 
             for (const call of aiResponse.toolCalls) {
-                logger.info('AI', `Tool call: ${call.name}`);
+                log.info('AI', `Tool call: ${call.name}`);
 
                 const apiResult = await executeCapability(call.name, call.args, universalMessage);
 

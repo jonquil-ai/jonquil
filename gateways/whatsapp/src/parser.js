@@ -6,7 +6,7 @@ function parseBaileysMessage(rawMsg, platformName) {
     const messageId = rawMsg.key.id;
     const chatId = rawMsg.key.remoteJid;
     const senderId = rawMsg.key.participant || rawMsg.key.remoteJid;
-    const senderName = rawMsg.pushName || "Kullanıcı";
+    const senderName = rawMsg.pushName || "Guest";
     const isGroup = chatId.endsWith('@g.us');
 
     const messageType = Object.keys(rawMsg.message)[0];
