@@ -25,4 +25,35 @@ class UniversalResponse {
     }
 }
 
-module.exports = { UniversalMessage, UniversalResponse };
+/**
+ * The common client that all gateways will use to connect to Jonquil.
+ */
+class CoreClient {
+    constructor(coreUrl = 'http://localhost:3000/api/chat') {
+        this.coreUrl = coreUrl;
+    }
+
+    async sendMessage(universalMessage) {
+        try {
+            const response = await fetch(this.coreUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(universalMessage)
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const data = await response.json();
+            return new UniversalResponse(data.reply);
+        } catch (error) {
+            console.error("[CORE_CLIENT] Jonquil is unreachable:", error.message);
+            return null;
+        }
+    }
+}
+
+module.exports = {
+    UniversalMessage,
+    UniversalResponse,
+    CoreClient
+};
