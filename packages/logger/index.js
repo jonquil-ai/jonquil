@@ -1,3 +1,4 @@
+// packages/logger/index.js
 const util = require('util');
 
 const colors = {
@@ -10,7 +11,7 @@ const colors = {
     blue: "\x1b[34m",
     magenta: "\x1b[35m",
     cyan: "\x1b[36m",
-    white: "\x1b[37m",
+    white: "\x1b[37m"
 };
 
 const timestamp = () => `\x1b[90m[${new Date().toLocaleTimeString()}]\x1b[0m`;
@@ -25,26 +26,42 @@ const printObjects = (args) => {
 };
 
 const logger = {
-    _print: (category, color, message, args) => {
+
+    _print: (category, color, message, args, context = null) => {
         const textArgs = args.filter(a => typeof a !== 'object').join(' ');
         const finalMessage = textArgs ? `${message} ${textArgs}` : message;
-        console.log(`${timestamp()} ${tag(category, color)} ${finalMessage}`);
+
+        let prefix = "";
+
+        if (context) {
+            
+            const name = context.senderName || 'unknown';
+            const platform = context.platform || 'test-cli';
+            const id = context.messageId ? context.messageId.substring(0, 6) : '---';
+            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
+        }
+
+        console.log(`${timestamp()} ${tag(category, color)} ${prefix}${finalMessage}`);
         
         const objArgs = args.filter(a => typeof a === 'object');
         printObjects(objArgs);
     },
 
-    info: (category, message, ...args) => logger._print(category, colors.blue, message, args),
-    success: (category, message, ...args) => logger._print(category, colors.green, message, args),
-    warn: (category, message, ...args) => logger._print(category, colors.yellow, message, args),
-    error: (category, message, ...args) => {
-        console.error(`${timestamp()} ${tag(category, colors.red)} ${message}`);
+    info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args),
+    success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args),
+    warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args),
+    error: (cat, msg, ...args) => {
+        console.error(`${timestamp()} ${tag(cat, colors.red)} ${msg}`);
         args.forEach(arg => console.error(arg));
     },
-    debug: (category, message, ...args) => {
-        // todo: is process.env.DEBUG true?
-        console.log(`${timestamp()} ${tag(category, colors.magenta)} ${colors.dim}${message}${colors.reset}`);
-        args.forEach(arg => console.log(util.inspect(arg, { colors: true, compact: true })));
+
+    with: (contextObj) => {
+        return {
+            info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args, contextObj),
+            success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args, contextObj),
+            warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args, contextObj),
+            error: (cat, msg, ...args) => logger._print(cat, colors.red, msg, args, contextObj),
+        };
     }
 };
 

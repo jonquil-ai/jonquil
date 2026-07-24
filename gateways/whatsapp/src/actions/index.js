@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const logger = require('@jonquil-ai/logger');
+const log = require('@jonquil-ai/logger');
 
 const actions = new Map();
 
@@ -13,12 +13,12 @@ for (const file of files) {
     }
 }
 
-logger.success('WA_GATEWAY', `${actions.size} number of Actions are ready.`);
+log.success('WA_GATEWAY', `${actions.size} number of Actions are ready.`);
 
 async function executeAction(actionType, payload, context) {
     const action = actions.get(actionType);
     if (!action) {
-        logger.warn('WA_GATEWAY', `Action not found: ${actionType}`);
+        log.warn('WA_GATEWAY', `Action not found: ${actionType}`);
         return;
     }
     await action.execute(payload, context);
