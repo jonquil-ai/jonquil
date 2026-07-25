@@ -1,4 +1,5 @@
 const { UniversalMessage } = require('@jonquil-ai/shared');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
 function extractText(messageObj) {
     if (!messageObj) return "";
@@ -8,7 +9,7 @@ function extractText(messageObj) {
            messageObj.videoMessage?.caption || "";
 }
 
-function parseBaileysMessage(rawMsg, platformName) {
+async function parseBaileysMessage(rawMsg, platformName, logger) {
     if (!rawMsg.message) return null;
 
     const messageId = rawMsg.key.id;
@@ -19,9 +20,20 @@ function parseBaileysMessage(rawMsg, platformName) {
     
     const text = extractText(rawMsg.message);
     const messageType = Object.keys(rawMsg.message)[0];
-    const hasMedia = ['imageMessage', 'videoMessage', 'audioMessage', 'stickerMessage'].includes(messageType);
+    const hasMedia = ['imageMessage', 'videoMessage', 'stickerMessage'].includes(messageType);
 
-    if (!text.trim() && !hasMedia) return null;
+    let mediaData = null;
+    let mediaMime = null;
+
+    if (hasMedia) {
+        try {
+            const buffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger });
+            mediaData = buffer.toString('base64');
+            mediaMime = rawMsg.message[messageType].mimetype;
+        } catch (e) {
+            logger.error('PARSER', 'Media could not be downloaded:', e.message);
+        }
+    }
 
     let quotedMessage = null;
     let mentions = [];
@@ -31,27 +43,45 @@ function parseBaileysMessage(rawMsg, platformName) {
                         rawMsg.message.videoMessage?.contextInfo;
 
     if (contextInfo) {
-        // get mentions
-        if (contextInfo.mentionedJid) {
-            mentions = contextInfo.mentionedJid;
-        }
+        if (contextInfo.mentionedJid) mentions = contextInfo.mentionedJid;
 
-        // get quoted msgs
         if (contextInfo.quotedMessage) {
+            const qMsgType = Object.keys(contextInfo.quotedMessage)[0];
+            let qMediaData = null;
+            let qMediaMime = null;
+
+            // quoted medias
+            if (['imageMessage', 'videoMessage', 'stickerMessage'].includes(qMsgType)) {
+                try {
+
+                    const fakeMsg = { message: contextInfo.quotedMessage };
+                    const qBuffer = await downloadMediaMessage(fakeMsg, 'buffer', {}, { logger });
+                    qMediaData = qBuffer.toString('base64');
+                    qMediaMime = contextInfo.quotedMessage[qMsgType].mimetype;
+                } catch (e) {
+                    logger.error('PARSER', 'The quoted media could not be downloaded:', e.message);
+                }
+            }
+
+
             quotedMessage = {
                 senderId: contextInfo.participant,
                 senderName: contextInfo.participant === senderId ? "Itself" : contextInfo.participant.split('@')[0],
-                text: extractText(contextInfo.quotedMessage)
+                text: extractText(contextInfo.quotedMessage),
+                mediaData: qMediaData,
+                mediaMime: qMediaMime
             };
         }
     }
+
+    if (!text.trim() && !hasMedia && !quotedMessage) return null;
 
     const timestamp = new Date(rawMsg.messageTimestamp * 1000).toISOString();
 
     return new UniversalMessage({
         platform: platformName,
         messageId, chatId, senderId, senderName, isGroup, text, hasMedia,
-        quotedMessage, mentions, timestamp
+        mediaData, mediaMime, quotedMessage, mentions, timestamp
     });
 }
 
