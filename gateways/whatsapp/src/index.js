@@ -8,6 +8,8 @@ const config = require('../config.json');
 const { parseBaileysMessage } = require('./parser');
 const { executeAction } = require('./actions');
 
+const maxLogLength = 999;
+
 const core = new CoreClient(config.coreUrl);
 
 async function connectToWhatsApp() {
@@ -41,12 +43,12 @@ async function connectToWhatsApp() {
         const rawMsg = m.messages[0];
         if (!rawMsg.message || rawMsg.key.fromMe) return;
 
-        const universalMsg = parseBaileysMessage(rawMsg, config.platform);
+        const universalMsg = await parseBaileysMessage(rawMsg, config.platform, logger);
         if (!universalMsg) return;
 
         const log = logger.with(universalMsg);
 
-        log.info('WA_GATEWAY', `Incoming: ${universalMsg.text.substring(0, 50)}...`);
+        log.info('WA_GATEWAY', `Incoming: ${universalMsg.text.substring(0, maxLogLength)}`);
 
         try {
             const response = await core.sendMessage(universalMsg);
@@ -57,7 +59,7 @@ async function connectToWhatsApp() {
                 setTimeout(async () => {
                     await sock.sendPresenceUpdate('paused', universalMsg.chatId);
                     await sock.sendMessage(universalMsg.chatId, { text: response.text }, { quoted: rawMsg });
-                    log.success('WA_GATEWAY', `Sent: ${response.text.substring(0, 50)}...`);
+                    log.success('WA_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
                 }, 1500);
             }
 
