@@ -4,6 +4,9 @@ class GeminiProvider {
     constructor() {
         if (!process.env.GEMINI_KEY) throw new Error("GEMINI_KEY is missing!");
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+
+        this.modelName = process.env.MODEL_NAME;
+        this.enableVision = process.env.ENABLE_VISION === 'true';
     }
 
     // uppercase for geminiSDK
@@ -35,20 +38,28 @@ class GeminiProvider {
     // format history array for geminiSDK
     _formatHistory(universalHistory) {
         return universalHistory.filter(msg => msg.role !== 'system').map(msg => {
-            if (msg.role === 'user') return { role: 'user', parts: [{ text: msg.content }] };
+            if (msg.role === 'user') {
+                
+                const parts = [{ text: msg.content }];
+                
+                if (this.enableVision && msg.media && msg.media.data) {
+                    parts.push({
+                        inlineData: {
+                            data: msg.media.data,
+                            mimeType: msg.media.mimeType
+                        }
+                    });
+                }
+                return { role: 'user', parts };
+            }
             if (msg.role === 'assistant') {
                 if (msg.toolCalls) {
                     return { 
                         role: 'model', 
                         parts: msg.toolCalls.map(tc => {
-                            const part = { 
-                                functionCall: { name: tc.name, args: tc.args } 
-                            };
-                            // !! send with thought_signature
+                            const part = { functionCall: { name: tc.name, args: tc.args } };
                             const sig = tc.thoughtSignature || tc.thought_signature;
-                            if (sig) {
-                                part.thoughtSignature = sig;
-                            }
+                            if (sig) part.thoughtSignature = sig;
                             return part;
                         }) 
                     };
@@ -67,7 +78,7 @@ class GeminiProvider {
         const systemInstruction = systemMsg ? systemMsg.content : "";
 
         const model = this.genAI.getGenerativeModel({
-            model: "gemini-flash-latest",
+            model: this.modelName,
             systemInstruction: systemInstruction,
             tools: this._formatTools(tools),
         });
@@ -77,32 +88,18 @@ class GeminiProvider {
         const result = await model.generateContent({ contents });
         const response = result.response;
 
-        const output = {
-            text: response.text() || null,
-            toolCalls: []
-        };
-
+        const output = { text: response.text() || null, toolCalls: [] };
         const candidate = response.candidates && response.candidates[0];
         const parts = candidate?.content?.parts || [];
 
-        // !! keep the gemini's thought_signature
         if (response.functionCalls()) {
-            output.toolCalls = parts
-                .filter(part => part.functionCall)
-                .map(part => {
-                    const tc = {
-                        name: part.functionCall.name,
-                        args: part.functionCall.args
-                    };
-                    // camelCase or snake_case, check it all
-                    const sig = part.thoughtSignature || part.thought_signature;
-                    if (sig) {
-                        tc.thoughtSignature = sig;
-                    }
-                    return tc;
-                });
+            output.toolCalls = parts.filter(part => part.functionCall).map(part => {
+                const tc = { name: part.functionCall.name, args: part.functionCall.args };
+                const sig = part.thoughtSignature || part.thought_signature;
+                if (sig) tc.thoughtSignature = sig;
+                return tc;
+            });
         }
-
         return output;
     }
 }

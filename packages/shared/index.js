@@ -4,7 +4,7 @@
  * to the CORE (Jonquil) service.
  */
 class UniversalMessage {
-    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, quotedMessage = null, mentions = [], timestamp = null }) {
+    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, mediaData = null, mediaMime = null, quotedMessage = null, mentions = [], timestamp = null }) {
         this.platform = platform;
         this.messageId = messageId;
         this.chatId = chatId;
@@ -13,9 +13,11 @@ class UniversalMessage {
         this.isGroup = isGroup;
         this.text = text || "";
         this.hasMedia = hasMedia;
+        this.mediaData = mediaData; 
+        this.mediaMime = mediaMime;
         this.quotedMessage = quotedMessage;
         this.mentions = mentions;
-        this.timestamp = timestamp || new Date().toISOString();
+        this.timestamp = timestamp || new Date().toISOString(); 
     }
     isEmpty() { return !this.text && !this.hasMedia; }
 }

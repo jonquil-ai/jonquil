@@ -44,15 +44,30 @@ async function handleMessageWithAI(universalMessage) {
     }
 
     const systemInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n[Current Platform]: ${universalMessage.platform}\n[Current Time]: ${timeStr}`;
-    const userPrompt = `[Environment: ${chatType}]\n[Username: ${universalMessage.senderName}]${quoteContext}\n[Message]: ${universalMessage.text}`;
+    let userPrompt = `[Environment: ${chatType}]\n[Username: ${universalMessage.senderName}]${quoteContext}\n[Message]: ${universalMessage.text}`;
 
     const sessionHistory = getSessionHistory(universalMessage.chatId);
+
+    let userMedia = null;
+    if (universalMessage.mediaData) {
+        userMedia = { data: universalMessage.mediaData, mimeType: universalMessage.mediaMime };
+        userPrompt += `\n[Media]: A photo/video has been added.`;
+    }
+    if (universalMessage.quotedMessage && universalMessage.quotedMessage.mediaData) {
+        userPrompt += `\n[Quoted Media]: The user quoted to a message that contained an image.`;
+
+        if (!userMedia) {
+            userMedia = { data: universalMessage.quotedMessage.mediaData, mimeType: universalMessage.quotedMessage.mediaMime };
+        }
+    }
 
     const history = [
         { role: "system", content: systemInstruction },
         ...sessionHistory,
-        { role: "user", content: userPrompt }
+        { role: "user", content: userPrompt, media: userMedia } 
     ];
+
+
 
     log.info('AI', `Incoming Request: ${universalMessage.text.substring(0, maxLogLength)}`);
 
