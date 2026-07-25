@@ -64,7 +64,7 @@ async function connectToWhatsApp() {
             if (response.actions && response.actions.length > 0) {
                 for (const action of response.actions) {
                     log.info('WA_GATEWAY', `Action : ${action.type}`);
-                    await executeAction(action.type, action.payload, { sock, universalMsg, log });
+                    await executeAction(action.type, action.payload, { sock, universalMsg, rawMsg, log });
                 }
             }
         } catch (error) {
