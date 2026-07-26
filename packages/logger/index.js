@@ -56,6 +56,24 @@ const logger = {
         args.forEach(arg => console.error(arg));
     },
 
+    dump: (title, data, contextObj = null) => {
+
+        if (process.env.AI_DEBUG_MODE !== 'true') return; 
+
+        let prefix = "";
+        if (contextObj) {
+            const name = contextObj.senderName || 'unknown';
+            const platform = contextObj.platform || 'cli';
+            const id = contextObj.messageId ? contextObj.messageId.substring(0, 6) : '---';
+            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
+        }
+
+        console.log(`\n${colors.magenta}┌── DEBUG DUMP: ${title.toUpperCase()} ─────────────────────────────${colors.reset}`);
+        console.log(`${prefix}`);
+        console.log(util.inspect(data, { colors: true, depth: null, compact: false }));
+        console.log(`${colors.magenta}└─────────────────────────────────────────────────────────────${colors.reset}\n`);
+    },
+
     with: (contextObj) => {
         return {
             info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args, contextObj),
@@ -63,6 +81,7 @@ const logger = {
             success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args, contextObj),
             warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args, contextObj),
             error: (cat, msg, ...args) => logger._print(cat, colors.red, msg, args, contextObj),
+            dump: (title, data) => logger.dump(title, data, contextObj) 
         };
     }
 };
