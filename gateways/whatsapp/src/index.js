@@ -7,6 +7,7 @@ const { CoreClient } = require('@jonquil-ai/shared');
 const config = require('../config.json');
 const { parseBaileysMessage } = require('./parser');
 const { executeAction } = require('./actions');
+const { saveToScreenCache } = require('./cache');
 
 const maxLogLength = 999;
 
@@ -42,6 +43,8 @@ async function connectToWhatsApp() {
     sock.ev.on('messages.upsert', async (m) => {
         const rawMsg = m.messages[0];
         if (!rawMsg.message || rawMsg.key.fromMe) return;
+
+        saveToScreenCache(rawMsg);
 
         const universalMsg = await parseBaileysMessage(rawMsg, config.platform, logger);
         if (!universalMsg) return;

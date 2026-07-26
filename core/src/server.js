@@ -15,14 +15,14 @@ app.post('/api/chat', async (req, res) => {
     // req.body, packages/shared/UniversalMessage
     const universalMessage = req.body;
 
-    if (!universalMessage || !universalMessage.text) {
+    if (!universalMessage || (!universalMessage.text && !universalMessage.hasMedia)) {
         return res.status(400).json({ error: "Invalid message format" });
     }
 
     try {
 
         const replyText = await handleMessageWithAI(universalMessage);
-        
+
         // todo: gateway actions support
         res.json({
             success: true,

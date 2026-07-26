@@ -38,28 +38,30 @@ async function handleMessageWithAI(universalMessage) {
     const dateObj = new Date(universalMessage.timestamp);
     const timeStr = dateObj.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' });
     
-    let quoteContext = "";
-    if (universalMessage.quotedMessage) {
-        quoteContext = `\n[Quoted Message | Author: ${universalMessage.quotedMessage.senderName}]: "${universalMessage.quotedMessage.text}"`;
-    }
 
-    const systemInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n[Current Platform]: ${universalMessage.platform}\n[Current Time]: ${timeStr}`;
-    let userPrompt = `[Environment: ${chatType}]\n[Username: ${universalMessage.senderName}]${quoteContext}\n[Message]: ${universalMessage.text}`;
+   let quoteContext = "";
+   if (universalMessage.quotedMessage) {
+       let qMediaTag = universalMessage.quotedMessage.hasMedia ? ` [Attached Media: ${universalMessage.quotedMessage.mediaType}]` : "";
+       quoteContext = `\n(Quoted MsgID: ${universalMessage.quotedMessage.messageId} | ${universalMessage.quotedMessage.senderName}): "${universalMessage.quotedMessage.text}"${qMediaTag}`;
+   }
 
-    const sessionHistory = getSessionHistory(universalMessage.chatId);
+   let mediaTag = "";
+   let userMedia = null;
+   if (universalMessage.hasMedia) {
+       userMedia = { data: universalMessage.mediaData, mimeType: universalMessage.mediaMime };
+       mediaTag = `\n[Media]: User sent a/an [${universalMessage.mediaType.toUpperCase()}].`;
+   }
 
-    let userMedia = null;
-    if (universalMessage.mediaData) {
-        userMedia = { data: universalMessage.mediaData, mimeType: universalMessage.mediaMime };
-        userPrompt += `\n[Media]: A photo/video has been added.`;
-    }
-    if (universalMessage.quotedMessage && universalMessage.quotedMessage.mediaData) {
-        userPrompt += `\n[Quoted Media]: The user quoted to a message that contained an image.`;
+   if (!userMedia && universalMessage.quotedMessage && universalMessage.quotedMessage.hasMedia) {
+       userMedia = { data: universalMessage.quotedMessage.mediaData, mimeType: universalMessage.quotedMessage.mediaMime };
+   }
 
-        if (!userMedia) {
-            userMedia = { data: universalMessage.quotedMessage.mediaData, mimeType: universalMessage.quotedMessage.mediaMime };
-        }
-    }
+   const systemInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n[Current Platform]: ${universalMessage.platform}\n[Current Time]: ${timeStr}`;
+   
+
+   const userPrompt = `[MsgID: ${universalMessage.messageId}] [User: ${universalMessage.senderName}]${quoteContext}\n[Message]: ${universalMessage.text}${mediaTag}`;
+
+   const sessionHistory = getSessionHistory(universalMessage.chatId);
 
     const history = [
         { role: "system", content: systemInstruction },
