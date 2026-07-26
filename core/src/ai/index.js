@@ -45,6 +45,7 @@ async function handleMessageWithAI(universalMessage) {
         { role: "user", content: userPrompt, media: userMedia } 
     ];
 
+    log.dump('AI INPUT (HISTORY)', history);
     log.info('AI', `Incoming Request: ${universalMessage.text.substring(0, maxLogLength)}`);
 
     let loopCount = 0;
@@ -54,6 +55,9 @@ async function handleMessageWithAI(universalMessage) {
 
     while (loopCount < MAX_LOOPS) {
         const aiResponse = await activeProvider.generate(history, availableSchemas);
+
+
+        log.dump(`AI OUTPUT (LOOP ${loopCount + 1})`, aiResponse);
 
         if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
             
