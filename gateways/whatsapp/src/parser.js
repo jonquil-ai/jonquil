@@ -9,6 +9,20 @@ function extractText(messageObj) {
            messageObj.videoMessage?.caption || "";
 }
 
+async function fetchMedia(msgObject, msgType, logger) {
+    try {
+        const buffer = await downloadMediaMessage(msgObject, 'buffer', {}, { logger });
+        return {
+            mediaData: buffer.toString('base64'),
+            mediaMime: msgObject.message[msgType].mimetype,
+            mediaType: msgType.replace('Message', '')
+        };
+    } catch (e) {
+        logger.error('PARSER', 'Media could not be downloaded:', e.message);
+        return null;
+    }
+}
+
 async function parseBaileysMessage(rawMsg, platformName, logger) {
     if (!rawMsg.message) return null;
 
@@ -20,28 +34,14 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
     
     const text = extractText(rawMsg.message);
     const messageType = Object.keys(rawMsg.message)[0];
-    const hasMedia = ['imageMessage', 'videoMessage', 'stickerMessage'].includes(messageType);
+    const hasMedia = ['imageMessage', 'videoMessage', 'stickerMessage', 'audioMessage'].includes(messageType);
 
-    let mediaData = null;
-    let mediaMime = null;
-    let mediaType = null;
 
-if (hasMedia) {
-    try {
+    let mediaObj = hasMedia ? await fetchMedia(rawMsg, messageType, logger) : null;
 
-        mediaType = messageType.replace('Message', ''); 
-        
-        const buffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger });
-        mediaData = buffer.toString('base64');
-        mediaMime = rawMsg.message[messageType].mimetype;
-    } catch (e) {
-        logger.error('PARSER', 'Media could not be downloaded:', e.message);
-    }
-}
 
     let quotedMessage = null;
     let mentions = [];
-    
     const contextInfo = rawMsg.message.extendedTextMessage?.contextInfo || 
                         rawMsg.message.imageMessage?.contextInfo || 
                         rawMsg.message.videoMessage?.contextInfo;
@@ -51,31 +51,18 @@ if (hasMedia) {
 
         if (contextInfo.quotedMessage) {
             const qMsgType = Object.keys(contextInfo.quotedMessage)[0];
-            let qMediaData = null;
-            let qMediaMime = null;
-            let qMediaType = null;
-
-            // quoted medias
-            if (['imageMessage', 'videoMessage', 'stickerMessage'].includes(qMsgType)) {
-                try {
-                    const fakeMsg = { message: contextInfo.quotedMessage };
-                    const qBuffer = await downloadMediaMessage(fakeMsg, 'buffer', {}, { logger });
-                    qMediaData = qBuffer.toString('base64');
-                    qMediaMime = contextInfo.quotedMessage[qMsgType].mimetype;
-                } catch (e) {
-                    logger.error('PARSER', 'The quoted media could not be downloaded:', e.message);
-                }
-            }
-
+            const isQuotedMedia = ['imageMessage', 'videoMessage', 'stickerMessage', 'audioMessage'].includes(qMsgType);
+            
+            const qMediaObj = isQuotedMedia ? await fetchMedia({ message: contextInfo.quotedMessage }, qMsgType, logger) : null;
 
             quotedMessage = {
                 messageId: contextInfo.stanzaId,
                 senderId: contextInfo.participant,
                 senderName: contextInfo.participant === senderId ? "Itself" : contextInfo.participant.split('@')[0],
                 text: extractText(contextInfo.quotedMessage),
-                mediaData: qMediaData,
-                mediaMime: qMediaMime,
-                mediaType: qMediaType
+                mediaType: qMediaObj?.mediaType || null,
+                mediaData: qMediaObj?.mediaData || null,
+                mediaMime: qMediaObj?.mediaMime || null
             };
         }
     }
@@ -87,7 +74,10 @@ if (hasMedia) {
     return new UniversalMessage({
         platform: platformName,
         messageId, chatId, senderId, senderName, isGroup, text, hasMedia,
-        mediaType, mediaData, mediaMime, quotedMessage, mentions, timestamp
+        mediaType: mediaObj?.mediaType, 
+        mediaData: mediaObj?.mediaData, 
+        mediaMime: mediaObj?.mediaMime, 
+        quotedMessage, mentions, timestamp
     });
 }
 
