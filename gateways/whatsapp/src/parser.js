@@ -24,16 +24,20 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
 
     let mediaData = null;
     let mediaMime = null;
+    let mediaType = null;
 
-    if (hasMedia) {
-        try {
-            const buffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger });
-            mediaData = buffer.toString('base64');
-            mediaMime = rawMsg.message[messageType].mimetype;
-        } catch (e) {
-            logger.error('PARSER', 'Media could not be downloaded:', e.message);
-        }
+if (hasMedia) {
+    try {
+
+        mediaType = messageType.replace('Message', ''); 
+        
+        const buffer = await downloadMediaMessage(rawMsg, 'buffer', {}, { logger });
+        mediaData = buffer.toString('base64');
+        mediaMime = rawMsg.message[messageType].mimetype;
+    } catch (e) {
+        logger.error('PARSER', 'Media could not be downloaded:', e.message);
     }
+}
 
     let quotedMessage = null;
     let mentions = [];
@@ -49,11 +53,11 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
             const qMsgType = Object.keys(contextInfo.quotedMessage)[0];
             let qMediaData = null;
             let qMediaMime = null;
+            let qMediaType = null;
 
             // quoted medias
             if (['imageMessage', 'videoMessage', 'stickerMessage'].includes(qMsgType)) {
                 try {
-
                     const fakeMsg = { message: contextInfo.quotedMessage };
                     const qBuffer = await downloadMediaMessage(fakeMsg, 'buffer', {}, { logger });
                     qMediaData = qBuffer.toString('base64');
@@ -65,11 +69,13 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
 
 
             quotedMessage = {
+                messageId: contextInfo.stanzaId,
                 senderId: contextInfo.participant,
                 senderName: contextInfo.participant === senderId ? "Itself" : contextInfo.participant.split('@')[0],
                 text: extractText(contextInfo.quotedMessage),
                 mediaData: qMediaData,
-                mediaMime: qMediaMime
+                mediaMime: qMediaMime,
+                mediaType: qMediaType
             };
         }
     }
@@ -81,7 +87,7 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
     return new UniversalMessage({
         platform: platformName,
         messageId, chatId, senderId, senderName, isGroup, text, hasMedia,
-        mediaData, mediaMime, quotedMessage, mentions, timestamp
+        mediaType, mediaData, mediaMime, quotedMessage, mentions, timestamp
     });
 }
 
