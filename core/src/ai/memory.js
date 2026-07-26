@@ -1,8 +1,8 @@
-const logger = require('@jonquil-ai/logger');
+const log = require('@jonquil-ai/logger');
 
 const sessions = new Map();
 
-const MAX_HISTORY_LENGTH = 10; 
+const MAX_HISTORY_LENGTH = process.env.AI_MAX_HISTORY_LENGTH || 30; 
 
 function getSessionHistory(chatId) {
     if (!sessions.has(chatId)) {
@@ -11,13 +11,11 @@ function getSessionHistory(chatId) {
     return sessions.get(chatId);
 }
 
-function saveToSession(chatId, userMessage, assistantMessage) {
+
+function saveToSession(chatId, newTurns) {
     const history = getSessionHistory(chatId);
     
-    history.push({ role: 'user', content: userMessage });
-    if (assistantMessage) {
-        history.push({ role: 'assistant', content: assistantMessage });
-    }
+    history.push(...newTurns);
 
     if (history.length > MAX_HISTORY_LENGTH) {
         history.splice(0, history.length - MAX_HISTORY_LENGTH);
@@ -27,7 +25,7 @@ function saveToSession(chatId, userMessage, assistantMessage) {
 // todo: clear msg history action
 function clearSession(chatId) {
     sessions.delete(chatId);
-    logger.info('MEMORY', `Clear message history for '${chatId}'`);
+    log.info('MEMORY', `Clear message history for '${chatId}'`);
 }
 
 module.exports = {
