@@ -3,12 +3,23 @@ const path = require('path');
 
 const soulPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'SOUL.md'), 'utf-8');
 const rulesPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'RULES.md'), 'utf-8');
+const ghostPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'GHOST.md'), 'utf-8');
 
 class ContextBuilder {
     static buildSystemInstruction(platform, timestamp) {
         const dateObj = new Date(timestamp);
         const timeStr = dateObj.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' });
-        return `${soulPrompt}\n\n${rulesPrompt}\n\n[Current Platform]: ${platform}\n[Current Time]: ${timeStr}`;
+        
+        let finalInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n`;
+
+        const isGhostModeEnabled = true; // todo
+        if (isGhostModeEnabled) {
+            finalInstruction += `${ghostPrompt}\n\n`;
+        }
+
+        finalInstruction += `[Current Platform]: ${platform}\n[Current Time]: ${timeStr}`;
+        
+        return finalInstruction;
     }
 
     static buildUserPrompt(universalMessage) {
