@@ -18,7 +18,14 @@ function saveToSession(chatId, newTurns) {
     history.push(...newTurns);
 
     if (history.length > MAX_HISTORY_LENGTH) {
-        history.splice(0, history.length - MAX_HISTORY_LENGTH);
+        let sliceIndex = history.length - MAX_HISTORY_LENGTH;
+
+        // slice the section up to the nearest user msg
+        while (sliceIndex < history.length && history[sliceIndex].role !== 'user') {
+            sliceIndex++;
+        }
+
+        history.splice(0, sliceIndex);
     }
 }
 
