@@ -5,11 +5,10 @@ class GeminiProvider {
         if (!process.env.GEMINI_KEY) throw new Error("GEMINI_KEY is missing!");
         this.genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
 
-        this.modelName = process.env.MODEL_NAME;
+        this.modelName = process.env.GEMINI_MODEL || "gemini-flash-latest";
         this.enableVision = process.env.ENABLE_VISION === 'true';
     }
 
-    // uppercase for geminiSDK
     _formatTools(universalTools) {
         if (!universalTools || universalTools.length === 0) return undefined;
         
@@ -17,7 +16,7 @@ class GeminiProvider {
             const formattedProperties = {};
             for (const [key, val] of Object.entries(tool.parameters.properties)) {
                 formattedProperties[key] = {
-                    type: val.type.toUpperCase(), // "string" -> "STRING"
+                    type: val.type.toUpperCase(), 
                     description: val.description
                 };
             }
@@ -25,7 +24,7 @@ class GeminiProvider {
                 name: tool.name,
                 description: tool.description,
                 parameters: {
-                    type: tool.parameters.type.toUpperCase(), // "object" -> "OBJECT"
+                    type: tool.parameters.type.toUpperCase(), 
                     properties: formattedProperties,
                     required: tool.parameters.required
                 }
@@ -35,11 +34,9 @@ class GeminiProvider {
         return [{ functionDeclarations: formattedTools }];
     }
 
-    // format history array for geminiSDK
     _formatHistory(universalHistory) {
         return universalHistory.filter(msg => msg.role !== 'system').map(msg => {
             if (msg.role === 'user') {
-                
                 const parts = [{ text: msg.content }];
                 
                 if (this.enableVision && msg.media && msg.media.data) {
@@ -54,15 +51,20 @@ class GeminiProvider {
             }
             if (msg.role === 'assistant') {
                 if (msg.toolCalls) {
-                    return { 
-                        role: 'model', 
-                        parts: msg.toolCalls.map(tc => {
-                            const part = { functionCall: { name: tc.name, args: tc.args } };
-                            const sig = tc.thoughtSignature || tc.thought_signature;
-                            if (sig) part.thoughtSignature = sig;
-                            return part;
-                        }) 
-                    };
+                    const parts = [];
+
+                    if (msg.content) {
+                        parts.push({ text: msg.content });
+                    }
+                    
+                    parts.push(...msg.toolCalls.map(tc => {
+                        const part = { functionCall: { name: tc.name, args: tc.args } };
+                        const sig = tc.thoughtSignature || tc.thought_signature;
+                        if (sig) part.thoughtSignature = sig;
+                        return part;
+                    }));
+                    
+                    return { role: 'model', parts: parts };
                 }
                 return { role: 'model', parts: [{ text: msg.content }] };
             }
@@ -72,7 +74,6 @@ class GeminiProvider {
         });
     }
 
-    // main func
     async generate(history, tools) {
         const systemMsg = history.find(m => m.role === 'system');
         const systemInstruction = systemMsg ? systemMsg.content : "";
@@ -94,8 +95,8 @@ class GeminiProvider {
 
         if (response.functionCalls()) {
             output.toolCalls = parts.filter(part => part.functionCall).map(part => {
-                const tc = { name: part.functionCall.name, args: part.functionCall.args };
                 const sig = part.thoughtSignature || part.thought_signature;
+                const tc = { name: part.functionCall.name, args: part.functionCall.args, id: sig || Math.random().toString(36).substring(7) };
                 if (sig) tc.thoughtSignature = sig;
                 return tc;
             });
