@@ -58,6 +58,7 @@ async function handleMessageWithAI(universalMessage) {
 
     while (loopCount < MAX_LOOPS) {
         const aiResponse = await activeProvider.generate(history, availableSchemas);
+        log.dump(`AI OUTPUT (LOOP ${loopCount + 1})`, aiResponse);
 
         if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
             const { thought, text, isSilent } = parseAIOutput(aiResponse.text);
