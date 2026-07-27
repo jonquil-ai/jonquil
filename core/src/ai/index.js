@@ -4,12 +4,14 @@ const logger = require('@jonquil-ai/logger');
 const { UniversalResponse } = require('@jonquil-ai/shared');
 
 const { getSchemasForPlatform, executeCapability } = require('../tools');
-const activeProvider = require('./providers/gemini');
+
+const providerName = process.env.ACTIVE_PROVIDER || 'gemini';
+const activeProvider = require(`./providers/${providerName}`);
+
 const { getSessionHistory, saveToSession } = require('./memory');
 const ContextBuilder = require('./contextBuilder');
 
 const maxLogLength = process.env.MAX_LOG_LENGTH || 100;
-
 
 function parseAIOutput(rawOutput) {
     if (!rawOutput) return { thought: null, text: null, isSilent: true };
@@ -20,7 +22,7 @@ function parseAIOutput(rawOutput) {
     const thoughtMatch = text.match(/<thought>([\s\S]*?)<\/thought>/);
     if (thoughtMatch) {
         thought = thoughtMatch[1].trim();
-        text = text.replace(/<thought>[\s\S]*?<\/thought>/, '').trim(); 
+        text = text.replace(/<thought>[\s\S]*?<\/thought>/, '').trim();
     }
 
     const isSilent = text === '<SILENCE>' || text === '';
@@ -42,7 +44,7 @@ async function handleMessageWithAI(universalMessage) {
     const history = [
         { role: "system", content: systemInstruction },
         ...sessionHistory,
-        { role: "user", content: userPrompt, media: userMedia } 
+        { role: "user", content: userPrompt, media: userMedia }
     ];
 
     log.dump('AI INPUT (HISTORY)', history);
@@ -51,7 +53,7 @@ async function handleMessageWithAI(universalMessage) {
     let loopCount = 0;
     const MAX_LOOPS = process.env.AI_MAX_LOOPS || 3;
     const pendingGatewayActions = [];
-    
+
     const newTurns = [
         { role: "user", content: userPrompt, media: userMedia }
     ];
@@ -79,8 +81,13 @@ async function handleMessageWithAI(universalMessage) {
         }
 
         if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+
+            const assistantToolTurn = { 
+                role: 'assistant', 
+                content: aiResponse.text || "", 
+                toolCalls: aiResponse.toolCalls 
+            };
             
-            const assistantToolTurn = { role: 'assistant', toolCalls: aiResponse.toolCalls };
             history.push(assistantToolTurn);
             newTurns.push(assistantToolTurn);
 
@@ -97,7 +104,8 @@ async function handleMessageWithAI(universalMessage) {
                     toolContent = apiResult;
                 }
 
-                const toolTurn = { role: 'tool', name: call.name, content: toolContent };
+                const toolTurn = { role: 'tool', id: call.id, name: call.name, content: toolContent };
+
                 history.push(toolTurn);
                 newTurns.push(toolTurn);
             }
