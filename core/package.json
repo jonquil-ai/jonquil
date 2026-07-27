@@ -9,6 +9,7 @@
         "@google/generative-ai": "^0.24.1",
         "@jonquil-ai/logger": "^1.0.0",
         "@jonquil-ai/shared": "^1.0.0",
+        "@mistralai/mistralai": "^2.5.0",
         "axios": "^1.18.1",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
