@@ -58,18 +58,26 @@ async function connectToWhatsApp() {
             if (!response) return;
 
             if (response.text) {
-                await sock.sendPresenceUpdate('composing', universalMsg.chatId);
-                setTimeout(async () => {
-                    await sock.sendPresenceUpdate('paused', universalMsg.chatId);
-                    await sock.sendMessage(universalMsg.chatId, { text: response.text }, { quoted: rawMsg });
-                    log.success('WA_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
-                }, 1500);
+                if (config.readOnly) {
+                    log.warn('WA_GATEWAY', `[READ-ONLY MODE] Message Sending Blocked: ${response.text.substring(0, 50)}...`);
+                } else {
+                    await sock.sendPresenceUpdate('composing', universalMsg.chatId);
+                    setTimeout(async () => {
+                        await sock.sendPresenceUpdate('paused', universalMsg.chatId);
+                        await sock.sendMessage(universalMsg.chatId, { text: response.text }, { quoted: rawMsg });
+                        log.success('WA_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
+                    }, 1500);
+                }
             }
 
             if (response.actions && response.actions.length > 0) {
                 for (const action of response.actions) {
-                    log.info('WA_GATEWAY', `Action : ${action.type}`);
-                    await executeAction(action.type, action.payload, { sock, universalMsg, rawMsg, log });
+                    if (config.readOnly) {
+                        log.warn('WA_GATEWAY', `[READ-ONLY MODE] Action Sending Blocked: ${action.type}`);
+                    } else {
+                        log.info('WA_GATEWAY', `Action : ${action.type}`);
+                        await executeAction(action.type, action.payload, { sock, universalMsg, rawMsg, log });
+                    }
                 }
             }
         } catch (error) {

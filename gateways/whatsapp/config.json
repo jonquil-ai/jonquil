@@ -1,5 +1,6 @@
 {
-    "platform": "whatsapp",
-    "coreUrl": "http://localhost:3000/api/chat",
-    "botName": "Jonquil AI"
-  }
+  "platform": "whatsapp",
+  "coreUrl": "http://localhost:3000/api/chat",
+  "botName": "Jonquil AI",
+  "readOnly": true
+}
