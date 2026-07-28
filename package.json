@@ -12,7 +12,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "release": "commit-and-tag-version",
     "dev:core": "npm run dev --workspace=core",
-    "dev:wa": "npm run dev --workspace=gateways/whatsapp"
+    "dev:wa": "npm run dev --workspace=gateways/whatsapp",
+    "dev:sim": "npm run dev --workspace=gateways/simulator"
   },
   "keywords": [],
   "author": "The Jonquil AI Authors",
