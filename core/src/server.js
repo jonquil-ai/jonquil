@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const logger = require('@jonquil-ai/logger');
 const handleMessageWithAI = require('./ai/index');
+const { enqueueTask } = require('./ai/queue');
 
 const app = express();
 app.use(cors());
@@ -11,27 +12,29 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const PORT = process.env.PORT || 3000;
 
-app.post('/api/chat', async (req, res) => {
-    // req.body, packages/shared/UniversalMessage
-    const universalMessage = req.body;
+app.post('/api/chat', (req, res) => {
+    const incomingData = req.body;
+    let messagesBatch = Array.isArray(incomingData) ? incomingData : [incomingData];
 
-    if (!universalMessage || (!universalMessage.text && !universalMessage.hasMedia)) {
+    const validMessages = messagesBatch.filter(m => m && (m.text || m.hasMedia));
+    
+    if (validMessages.length === 0) {
         return res.status(400).json({ error: "Invalid message format" });
     }
 
-    try {
+    const chatId = validMessages[0].chatId;
 
-        const replyText = await handleMessageWithAI(universalMessage);
-
-        // todo: gateway actions support
-        res.json({
-            success: true,
-            reply: replyText
-        });
-    } catch (error) {
-        logger.error('CORE', 'Server error', error);
-        res.status(500).json({ success: false, error: "Jonquil is currently unavailable." });
-    }
+    enqueueTask(chatId, async () => {
+        try {
+            const replyObj = await handleMessageWithAI(validMessages);
+            res.json({ success: true, reply: replyObj });
+        } catch (error) {
+            logger.error('CORE', 'Server error', error);
+            if (!res.headersSent) {
+                res.status(500).json({ success: false, error: "Jonquil is currently unavailable." });
+            }
+        }
+    });
 });
 
 app.listen(PORT, () => {
