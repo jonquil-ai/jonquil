@@ -57,8 +57,44 @@ class CoreClient {
     }
 }
 
+
+/**
+ * A "Message Debouncer" that all Gateways can use in common.
+ * It holds incoming messages for a specific period and sends 
+ * them to the callback as an array.
+ */
+class MessageBatcher {
+    constructor(delayMs = 3000, onBatchReady) {
+        this.delayMs = delayMs;
+        this.onBatchReady = onBatchReady;
+        this.queues = new Map();
+        this.timers = new Map();
+    }
+
+    add(chatId, universalMsg, rawMsg) {
+        if (!this.queues.has(chatId)) {
+            this.queues.set(chatId, []);
+        }
+        
+        this.queues.get(chatId).push({ universalMsg, rawMsg });
+
+        if (this.timers.has(chatId)) {
+            clearTimeout(this.timers.get(chatId));
+        }
+
+        this.timers.set(chatId, setTimeout(() => {
+            const batch = this.queues.get(chatId);
+            this.queues.delete(chatId);
+            this.timers.delete(chatId);
+            
+            this.onBatchReady(chatId, batch);
+        }, this.delayMs));
+    }
+}
+
 module.exports = {
     UniversalMessage,
     UniversalResponse,
-    CoreClient
+    CoreClient,
+    MessageBatcher
 };
