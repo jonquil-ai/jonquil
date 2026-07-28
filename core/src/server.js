@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const logger = require('@jonquil-ai/logger');
 const handleMessageWithAI = require('./ai/index');
-const { enqueueTask } = require('./ai/queue');
+const { enqueueTask } = require('./ai/taskLock');
 
 const app = express();
 app.use(cors());
