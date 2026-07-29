@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.2.0](https://github.com/jonquil-ai/jonquil/compare/v0.1.0...v0.2.0) (2026-07-29)
+
+### Features
+
+* **actions:** Implement Sticker Generation Action ([#10](https://github.com/jonquil-ai/jonquil/issues/10)) ([51288a0](https://github.com/jonquil-ai/jonquil/commit/51288a006fece4e0c54d5e61a3df87dc24fb89eb))
+* **actions:** implement make_a_sticker action with sharp ([ad43665](https://github.com/jonquil-ai/jonquil/commit/ad43665a7b9e6bf42deac806e40ab8b701753a46))
+* **ai:** add IDs for tools to Gemini adapter ([9b47d40](https://github.com/jonquil-ai/jonquil/commit/9b47d4028828c321fb31f97a47da0ce9b209cfef))
+* **ai:** add Mistral AI adapter ([9168ce2](https://github.com/jonquil-ai/jonquil/commit/9168ce22f8f08980fc88705cd13fdd7c011de685))
+* **ai:** integrate MsgID awareness and media summaries ([2f27367](https://github.com/jonquil-ai/jonquil/commit/2f27367987dd4b2ab42f3f1fdb1356c4224d8a9e))
+* **ai:** integrate multimodal vision capabilities ([7396b74](https://github.com/jonquil-ai/jonquil/commit/7396b74ba87b69711db190741163c43ff87d14e7))
+* **ai:** Mistral AI Provider Integration ([#21](https://github.com/jonquil-ai/jonquil/issues/21)) ([58d0866](https://github.com/jonquil-ai/jonquil/commit/58d0866a23b0351a903cadcdf0bf963768e6d744))
+* **config:** add a ai debug option to .env.example file ([77fbd19](https://github.com/jonquil-ai/jonquil/commit/77fbd1907b23fab6d2bda798e0e26a112da15f5e))
+* **config:** add new configs to .enx example file ([dc32639](https://github.com/jonquil-ai/jonquil/commit/dc326399bbf9e2ff070990152352772b87aba89d))
+* **config:** transition memory limits from array length to token count ([66ece64](https://github.com/jonquil-ai/jonquil/commit/66ece6468b321edb96be5852ef48b01576e88dea))
+* **core:** add support for importing dynamic AI provider ([a7fab10](https://github.com/jonquil-ai/jonquil/commit/a7fab1039e792f8109f8419401039d1bd7fb2fa7))
+* **core:** add support for sending media contents to AI ([#9](https://github.com/jonquil-ai/jonquil/issues/9)) ([60103af](https://github.com/jonquil-ai/jonquil/commit/60103af17bfc68ebaa1825d6b39083d174e67c1f))
+* **core:** Contextual Media Awareness and Message Caching for WA ([#11](https://github.com/jonquil-ai/jonquil/issues/11)) ([c93555f](https://github.com/jonquil-ai/jonquil/commit/c93555f4ceb24e596b75f3d3097f318c3011d45c))
+* **core:** implement async FIFO queue and array processing ([ec58d25](https://github.com/jonquil-ai/jonquil/commit/ec58d259de224839f04247df63a05f46c1ad7b34))
+* **dx:** implement debug dump mode for AI in/outputs ([#13](https://github.com/jonquil-ai/jonquil/issues/13)) ([9906fa8](https://github.com/jonquil-ai/jonquil/commit/9906fa88268d4d92c1843b42794229e9cbdc2107))
+* **gateways:** implement read-only mode for silent observation ([#22](https://github.com/jonquil-ai/jonquil/issues/22)) ([026b444](https://github.com/jonquil-ai/jonquil/commit/026b444b82cd681ffb14e66b692b411046df3f6c))
+* **gateways:** Simulator Gateway for Interactive Testing ([#23](https://github.com/jonquil-ai/jonquil/issues/23)) ([edfd754](https://github.com/jonquil-ai/jonquil/commit/edfd7545ec1cf6ccb6591227daf707d1b5e79a3c))
+* **logs:** implement deep debug dump for AI introspection ([25c47cf](https://github.com/jonquil-ai/jonquil/commit/25c47cfdc8f609ea168050de88983cbb840c13f6))
+* **logs:** inject dump checkpoints in the AI core ([4c5dac2](https://github.com/jonquil-ai/jonquil/commit/4c5dac23720b867ee0c51250add747c82815e733))
+* **memory:** Asynchronous Message Debouncing and Core FIFO Task Locking ([#25](https://github.com/jonquil-ai/jonquil/issues/25)) ([d1c1238](https://github.com/jonquil-ai/jonquil/commit/d1c1238d2487a99652dffed9b1c6e6a30e46b288))
+* **memory:** implement dynamic token-based history truncation ([457ad19](https://github.com/jonquil-ai/jonquil/commit/457ad1979d94f175d06a7561739a4833722618f9))
+* **memory:** Token-Based Context Window Management ([#29](https://github.com/jonquil-ai/jonquil/issues/29)) ([1eceefa](https://github.com/jonquil-ai/jonquil/commit/1eceefabbde4bf27862370b04be5e5b0a1655803))
+* **prompts:** refactor prompt architecture for dynamic ghosting and deep persona ([74a4148](https://github.com/jonquil-ai/jonquil/commit/74a4148068c43908c6cd2e78c4a2ded18d5342cb))
+* **prompts:** refactor prompts for dynamic ghosting and better persona ([#19](https://github.com/jonquil-ai/jonquil/issues/19)) ([b1ade9a](https://github.com/jonquil-ai/jonquil/commit/b1ade9a85559fa706a1dab6e1563347bee49d2bf))
+* **shared:** add media buffer fields to UniversalMessage ([3cb8f22](https://github.com/jonquil-ai/jonquil/commit/3cb8f22686812c90c9f23267f4f7c64f9ca9634b))
+* **shared:** add mediaType and quoted message IDs ([f2810e3](https://github.com/jonquil-ai/jonquil/commit/f2810e3e4f198ba3a78b808be4eba1e7986a7143))
+* **shared:** implement cross-platform MessageBatcher utility ([0b31fb0](https://github.com/jonquil-ai/jonquil/commit/0b31fb0b9722d2ebba246c3e379592244f41c043))
+* **sim_gateway:** create chat export parser for local testing ([ae3bbbf](https://github.com/jonquil-ai/jonquil/commit/ae3bbbf710cebd028599b41109cd3d6a994ce132))
+* **sim_gateway:** implement interactive CLI playback engine ([bf3a43c](https://github.com/jonquil-ai/jonquil/commit/bf3a43c452368f78dc12c1b0a15e1b0510716732))
+* **wa_gateway:** implement caching for media targeting ([f5da3a5](https://github.com/jonquil-ai/jonquil/commit/f5da3a531968f7db13af67e9699f108cc6f94e53))
+* **wa_gateway:** implement media downloading in parser ([0115cf0](https://github.com/jonquil-ai/jonquil/commit/0115cf0b7b74cdc062d20590db459173b168ebb5))
+* **wa_gateway:** implement read-only mode for silent observation ([fe8804b](https://github.com/jonquil-ai/jonquil/commit/fe8804b53e83fe5597ebcc53237180a754fcb8ce))
+
+### Bug Fixes
+
+* **core:** resolve broken import path for taskLock module ([e626b6b](https://github.com/jonquil-ai/jonquil/commit/e626b6bfa2a4794d1e2068eb663b617046a1cb24))
+* **core:** resolve broken import path for taskLock module ([#28](https://github.com/jonquil-ai/jonquil/issues/28)) ([6e2aa64](https://github.com/jonquil-ai/jonquil/commit/6e2aa644479561c9b4ab46f9cb41e041b279a170))
+* **logs:** add the missing AI output dump log ([13e3ee5](https://github.com/jonquil-ai/jonquil/commit/13e3ee5e801b8331f593c15d7225a3addcf290c6))
+* **memory:** Memory Amnesia Resolution and New Configs ([#15](https://github.com/jonquil-ai/jonquil/issues/15)) ([1d81860](https://github.com/jonquil-ai/jonquil/commit/1d81860805babfcc29768ec02bebf396dcf48ef1))
+* **memory:** prevent tool chain corruption during history truncation ([a71e2b2](https://github.com/jonquil-ai/jonquil/commit/a71e2b277612ea8942a204c1695f6c58c53c1148))
+* **memory:** prevent tool chain corruption during history truncation ([#17](https://github.com/jonquil-ai/jonquil/issues/17)) ([a037c59](https://github.com/jonquil-ai/jonquil/commit/a037c59652808a343def42be3bb94e76081811f3))
+* **memory:** resolve AI amnesia regarding ghost mode and tools ([f7ecff7](https://github.com/jonquil-ai/jonquil/commit/f7ecff7d8f495741ed98f64c27a7edd473565e4c))
+* **wa_gateway:** disable the default readOnly mode ([b8a8e46](https://github.com/jonquil-ai/jonquil/commit/b8a8e46b1fe48dc05bf581cf9c27bfbe31f34c6c))
 ## 0.1.0 (2026-07-25)
 
 ### Features
