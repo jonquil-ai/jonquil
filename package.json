@@ -13,6 +13,7 @@
     "release": "commit-and-tag-version",
     "dev:core": "npm run dev --workspace=core",
     "dev:wa": "npm run dev --workspace=gateways/whatsapp",
+    "dev:tg": "npm run dev --workspace=gateways/telegram",
     "dev:sim": "npm run dev --workspace=gateways/simulator"
   },
   "keywords": [],
