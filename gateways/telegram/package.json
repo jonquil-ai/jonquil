@@ -1,0 +1,14 @@
+{
+    "name": "@jonquil-ai/tg-gateway",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+        "dev": "node src/index.js"
+    },
+    "dependencies": {
+        "@jonquil-ai/logger": "^1.0.0",
+        "@jonquil-ai/shared": "^1.0.0",
+        "axios": "^1.18.1",
+        "telegraf": "^4.16.3"
+    }
+}

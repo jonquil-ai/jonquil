@@ -1,0 +1,6 @@
+{
+    "platform": "telegram",
+    "coreUrl": "http://localhost:3000/api/chat",
+    "botName": "Jonquil",
+    "readOnly": false
+}
