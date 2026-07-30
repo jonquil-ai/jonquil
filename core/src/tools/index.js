@@ -1,22 +1,35 @@
-// core/src/tools/index.js
 const fs = require('fs');
 const path = require('path');
 const logger = require('@jonquil-ai/logger');
 
 const capabilities = new Map();
 
-const files = fs.readdirSync(__dirname).filter(file => file.endsWith('.js') && file !== 'index.js');
+const items = fs.readdirSync(__dirname);
 
-for (const file of files) {
-    const item = require(path.join(__dirname, file));
-    if (item.schema && item.schema.name) {
-        capabilities.set(item.schema.name, item);
+for (const item of items) {
+    if (item === 'index.js') continue;
+
+    const fullPath = path.join(__dirname, item);
+    const stat = fs.statSync(fullPath);
+
+    let moduleItem = null;
+
+    if (stat.isFile() && item.endsWith('.js')) {
+        moduleItem = require(fullPath);
+    } else if (stat.isDirectory()) {
+        const indexPath = path.join(fullPath, 'index.js');
+        if (fs.existsSync(indexPath)) {
+            moduleItem = require(indexPath);
+        }
+    }
+
+    if (moduleItem && moduleItem.schema && moduleItem.schema.name) {
+        capabilities.set(moduleItem.schema.name, moduleItem);
     }
 }
 
 logger.success('CORE', `${capabilities.size} Skills (Tools/Actions) have been loaded.`);
 
-// filtering skills
 function getSchemasForPlatform(platformName) {
     const schemas = [];
     capabilities.forEach((item) => {
