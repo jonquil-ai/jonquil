@@ -1,6 +1,18 @@
 const { UniversalMessage } = require('@jonquil-ai/shared');
+const axios = require('axios');
 
-function parseTelegramMessage(ctx, platformName) {
+async function fetchTelegramMedia(ctx, fileId) {
+    try {
+        const link = await ctx.telegram.getFileLink(fileId);
+        const response = await axios.get(link.href, { responseType: 'arraybuffer' });
+        const buffer = Buffer.from(response.data);
+        return buffer.toString('base64');
+    } catch (e) {
+        return null;
+    }
+}
+
+async function parseTelegramMessage(ctx, platformName) {
     const msg = ctx.message;
     if (!msg) return null;
 
@@ -17,10 +29,24 @@ function parseTelegramMessage(ctx, platformName) {
     // media
     const hasMedia = !!(msg.photo || msg.video || msg.sticker || msg.voice || msg.audio);
     let mediaType = null;
-    if (msg.photo) mediaType = 'image';
-    else if (msg.video) mediaType = 'video';
-    else if (msg.sticker) mediaType = 'sticker';
-    else if (msg.voice || msg.audio) mediaType = 'audio';
+    let mediaData = null;
+    let mediaMime = null;
+
+    if (msg.photo) {
+        mediaType = 'image';
+        mediaMime = 'image/jpeg';
+    } else if (msg.video) {
+        mediaType = 'video';
+        mediaMime = 'video/mp4';
+    } else if (msg.sticker) {
+        mediaType = 'sticker';
+        mediaMime = 'image/webp';
+    } else if (msg.voice || msg.audio) {
+        mediaType = 'audio';
+        mediaMime = msg.voice ? 'audio/ogg' : (msg.audio.mime_type || 'audio/mp3');
+        const fileId = msg.voice ? msg.voice.file_id : msg.audio.file_id;
+        mediaData = await fetchTelegramMedia(ctx, fileId);
+    }
 
     // quoted msg
     let quotedMessage = null;
@@ -39,7 +65,6 @@ function parseTelegramMessage(ctx, platformName) {
             senderName: qMsg.from.id === ctx.botInfo.id ? "Itself" : (qMsg.from.first_name || "Guest"),
             text: qMsg.text || qMsg.caption || "",
             mediaType: qMediaType
-            // todo: download medias
         };
     }
 
@@ -58,7 +83,9 @@ function parseTelegramMessage(ctx, platformName) {
 
     return new UniversalMessage({
         platform: platformName,
-        messageId, chatId, senderId, senderName, isGroup, text, hasMedia, mediaType, quotedMessage, mentions, timestamp
+        messageId, chatId, senderId, senderName, isGroup, text, 
+        hasMedia, mediaType, mediaData, mediaMime,
+        quotedMessage, mentions, timestamp
     });
 }
 
