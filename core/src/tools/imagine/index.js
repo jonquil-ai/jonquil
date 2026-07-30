@@ -20,7 +20,7 @@ module.exports = {
     execute: async (args, messageContext) => {
         logger.info('ACTION', `generate_image running... Prompt: "${args.prompt}"`);
 
-        const providerName = process.env.IMAGE_PROVIDER || 'pollinations';
+        const providerName = process.env.IMAGINE_PROVIDER || 'pollinations';
         let result;
 
         if (providerName === 'hf') {

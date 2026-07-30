@@ -10,7 +10,7 @@ module.exports = {
         }
 
         logger.info('TOOL', `HuggingFace generating image: "${prompt.substring(0, 30)}..."`);
-        const model = process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-dev';
+        const model = process.env.IMAGINE_HF_MODEL || 'black-forest-labs/FLUX.1-dev';
 
         try {
             const response = await axios.post(
