@@ -8,6 +8,8 @@ const config = require('../config.json');
 const { parseTelegramMessage } = require('./parser');
 const { executeAction } = require('./actions');
 
+const maxLogLength = parseInt(process.env.MAX_LOG_LENGTH) || 100;
+
 const core = new CoreClient(config.coreUrl);
 
 if (!process.env.TG_BOT_TOKEN) {
@@ -61,20 +63,22 @@ const batcher = new MessageBatcher(3000, async (chatId, batch) => {
 
 // msg listener
 bot.on('message', async (ctx) => {
-    const universalMsg = parseTelegramMessage(ctx, config.platform);
+    // FIX: Added await here for async parseTelegramMessage
+    const universalMsg = await parseTelegramMessage(ctx, config.platform);
     if (!universalMsg) return;
 
     const tempLog = logger.with(universalMsg);
-    tempLog.info('TG_GATEWAY', `[Added to queue]: ${universalMsg.text.substring(0, maxLogLength)}`);
+    const logPreview = universalMsg.text ? universalMsg.text.substring(0, maxLogLength) : `[Media: ${universalMsg.mediaType || 'audio'}]`;
+    tempLog.info('TG_GATEWAY', `[Added to queue]: ${logPreview}`);
 
     batcher.add(universalMsg.chatId, universalMsg, ctx);
 });
 
-    // start bot
-    bot.launch(() => {
-        logger.success('TG_GATEWAY', 'Connected to Telegram successfully!');
-    });
+// start bot
+bot.launch(() => {
+    logger.success('TG_GATEWAY', 'Connected to Telegram successfully!');
+});
 
-    // graceful stop
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+// graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
