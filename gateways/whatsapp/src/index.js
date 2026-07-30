@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const logger = require('@jonquil-ai/logger');
@@ -16,7 +16,11 @@ const core = new CoreClient(config.coreUrl);
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState(__dirname + '/../auth_session');
 
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`WA Version: v${version.join('.')}, isLatest: ${isLatest}`);
+
     const sock = makeWASocket({
+        version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         auth: state,
