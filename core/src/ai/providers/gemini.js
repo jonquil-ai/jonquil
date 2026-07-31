@@ -9,25 +9,43 @@ class GeminiProvider {
         this.enableVision = process.env.ENABLE_VISION === 'true';
     }
 
+    // Recursive schema parser to support nested objects, arrays, and enums
+    _parseSchema(schemaObj) {
+        if (!schemaObj) return undefined;
+        
+        const parsed = {
+            type: schemaObj.type.toUpperCase()
+        };
+        
+        if (schemaObj.description) parsed.description = schemaObj.description;
+        if (schemaObj.enum) parsed.enum = schemaObj.enum;
+        
+        if (schemaObj.properties) {
+            parsed.properties = {};
+            for (const [key, val] of Object.entries(schemaObj.properties)) {
+                parsed.properties[key] = this._parseSchema(val);
+            }
+        }
+        
+        if (schemaObj.items) {
+            parsed.items = this._parseSchema(schemaObj.items);
+        }
+        
+        if (schemaObj.required) {
+            parsed.required = schemaObj.required;
+        }
+
+        return parsed;
+    }
+
     _formatTools(universalTools) {
         if (!universalTools || universalTools.length === 0) return undefined;
         
         const formattedTools = universalTools.map(tool => {
-            const formattedProperties = {};
-            for (const [key, val] of Object.entries(tool.parameters.properties)) {
-                formattedProperties[key] = {
-                    type: val.type.toUpperCase(), 
-                    description: val.description
-                };
-            }
             return {
                 name: tool.name,
                 description: tool.description,
-                parameters: {
-                    type: tool.parameters.type.toUpperCase(), 
-                    properties: formattedProperties,
-                    required: tool.parameters.required
-                }
+                parameters: this._parseSchema(tool.parameters)
             };
         });
 
