@@ -1,6 +1,6 @@
 {
   "name": "jonquil",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Autonomous AI agent core. Platform-agnostic intelligence for the Jonquil Ecosystem.",
   "main": "index.js",
   "workspaces": [

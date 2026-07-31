@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.3.0](https://github.com/jonquil-ai/jonquil/compare/v0.2.0...v0.3.0) (2026-07-31)
+
+### ⚠ BREAKING CHANGES
+
+* **gateways:** Centralized Config and Telegram Gateway Integration (#30)
+* **config:** The .env file must now be placed in the project root.
+  Placing it in the core folder will result in missing API keys and fatal
+  crashes.
+
+* **config:** centralize environment variables to root directory ([7d1d3a9](https://github.com/jonquil-ai/jonquil/commit/7d1d3a9e650e55346002dd05064f6ed51522452c))
+
+### Features
+
+* **actions:** add flexible send_media action for gateways ([08e266c](https://github.com/jonquil-ai/jonquil/commit/08e266ce4d589791a739878942f4feca0ace8c5b))
+* **ai:** add native audio and voice note processing ([#36](https://github.com/jonquil-ai/jonquil/issues/36)) ([175954e](https://github.com/jonquil-ai/jonquil/commit/175954e5b1b06b56ac1cfc8b8aff997cab845c5c))
+* **ai:** add native audio processing for voice notes ([2211c76](https://github.com/jonquil-ai/jonquil/commit/2211c767eea1420a8560500f23915d3e91feae67))
+* **ai:** add recursive schema parsing for enums in gemini ([23c5d83](https://github.com/jonquil-ai/jonquil/commit/23c5d83e9df5ceb341e6c0698700f342c1853db6))
+* **apps:** add native web gateway platform and web client application ([#47](https://github.com/jonquil-ai/jonquil/issues/47)) ([73c7ca7](https://github.com/jonquil-ai/jonquil/commit/73c7ca7440b68251b0fd2dd5e142c4577876cd01))
+* **apps:** create web client interface with thought viewer ([7525b4b](https://github.com/jonquil-ai/jonquil/commit/7525b4bdd0d1b25b2dd681370dd6d17bb0fa54e6))
+* **config:** add new configs to .env example file ([946d6d1](https://github.com/jonquil-ai/jonquil/commit/946d6d1f2b5ada56cf62543ebe4647368a13993b))
+* **config:** add TG token config to .env example file ([b7069d2](https://github.com/jonquil-ai/jonquil/commit/b7069d25992506f50e88731055477d3b38ad684d))
+* **gateways:** Centralized Config and Telegram Gateway Integration ([#30](https://github.com/jonquil-ai/jonquil/issues/30)) ([279e24d](https://github.com/jonquil-ai/jonquil/commit/279e24d3e45b6fe25c696c73e40476c09650215c))
+* **gateways:** implement web gateway API with rate limiting ([2811a97](https://github.com/jonquil-ai/jonquil/commit/2811a97a229fa42de87859322b3f8ff1eead908a))
+* **tg_gateway:** implement cross-platform Telegram execution engine ([0bb36aa](https://github.com/jonquil-ai/jonquil/commit/0bb36aad81f92975e3be866542d93f2cf426ada6))
+* **tg_gateway:** implement native Telegram message parser ([effaf24](https://github.com/jonquil-ai/jonquil/commit/effaf24d2330557efec45f3ace041c01627e9b3b))
+* **tools:** add a chance tool for dice rolling and coin flipping ([#34](https://github.com/jonquil-ai/jonquil/issues/34)) ([1bb0659](https://github.com/jonquil-ai/jonquil/commit/1bb065955bbbc5eda3953dbc9d87eb5a0a56fb49))
+* **tools:** add a tool for dice and coins ([f02a994](https://github.com/jonquil-ai/jonquil/commit/f02a9945cd557b6dd67124812595204c5b36babb))
+* **tools:** add iTunes API tool for music search and playback ([fc7e751](https://github.com/jonquil-ai/jonquil/commit/fc7e751171df8d6518363f5a26d7f7399585149e))
+* **tools:** add music_search tool and schema enum support ([#45](https://github.com/jonquil-ai/jonquil/issues/45)) ([d37c853](https://github.com/jonquil-ai/jonquil/commit/d37c8538bebda26b10503bbeea1a2e5ec640d09f))
+* **tools:** add safe expression calculator tool for precise math ([bface89](https://github.com/jonquil-ai/jonquil/commit/bface892d23432b0f48ff144ad603815f10554cd))
+* **tools:** add safe expression calculator tool for precise math ([#43](https://github.com/jonquil-ai/jonquil/issues/43)) ([1194821](https://github.com/jonquil-ai/jonquil/commit/1194821f114a1b63219f337dcc7b58879779c990))
+* **tools:** enhance calculator to support advanced math functions ([0ada4d5](https://github.com/jonquil-ai/jonquil/commit/0ada4d5326092ec329ee4b05b7531b02c06533bc))
+* **tools:** implement imagine tool with multi-provider support ([8539f03](https://github.com/jonquil-ai/jonquil/commit/8539f03c2eaa30a91af4f20ca241bf8544eca2e9))
+* **tools:** implement multi-provider imagine tool and send_media action ([#41](https://github.com/jonquil-ai/jonquil/issues/41)) ([1021809](https://github.com/jonquil-ai/jonquil/commit/1021809217840915f0da720d7b04f8ea2b8590bf))
+* **wa_gateway:** add Baileys version control to gateway index ([2e1de2f](https://github.com/jonquil-ai/jonquil/commit/2e1de2f56655517f5176c7de6e2c009dcb3c9f07))
+
+### Bug Fixes
+
+* **core:** preserve tool result metadata for gateway actions ([7539095](https://github.com/jonquil-ai/jonquil/commit/753909585aa8189ed27e4583584c9a761d5ce3d7))
+* **tg_gateway:** resolve async message parsing crash ([0d2623f](https://github.com/jonquil-ai/jonquil/commit/0d2623fd5f112dbd93113f1275029aecd2ef2682))
+* **tools:** correct environment variable names ([72cf84b](https://github.com/jonquil-ai/jonquil/commit/72cf84b66aedc34e63b56328b73c009b27bdd480))
+* **wa_gateway:** resolve Baileys connection loop fail ([#32](https://github.com/jonquil-ai/jonquil/issues/32)) ([4ac30a0](https://github.com/jonquil-ai/jonquil/commit/4ac30a0a566b43a2b0c3238d2e159e7c778726f8))
 ## [0.2.0](https://github.com/jonquil-ai/jonquil/compare/v0.1.0...v0.2.0) (2026-07-29)
 
 ### Features
