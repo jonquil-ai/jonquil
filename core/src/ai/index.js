@@ -31,9 +31,7 @@ function parseAIOutput(rawOutput) {
     return { thought, text, isSilent };
 }
 
-
 async function handleMessageWithAI(universalMessages) {
-
     const messages = Array.isArray(universalMessages) ? universalMessages : [universalMessages];
     
     const lastMsg = messages[messages.length - 1];
@@ -43,7 +41,6 @@ async function handleMessageWithAI(universalMessages) {
     const systemInstruction = ContextBuilder.buildSystemInstruction(lastMsg.platform, lastMsg.timestamp);
     const sessionHistory = getSessionHistory(lastMsg.chatId);
 
-    // start hist
     const history = [
         { role: "system", content: systemInstruction },
         ...sessionHistory
@@ -66,64 +63,64 @@ async function handleMessageWithAI(universalMessages) {
     const MAX_LOOPS = process.env.AI_MAX_LOOPS || 3;
     const pendingGatewayActions = [];
 
+    while (loopCount < MAX_LOOPS) {
+        const aiResponse = await activeProvider.generate(history, availableSchemas);
+        log.dump(`AI OUTPUT (LOOP ${loopCount + 1})`, aiResponse);
 
-while (loopCount < MAX_LOOPS) {
-    const aiResponse = await activeProvider.generate(history, availableSchemas);
-    log.dump(`AI OUTPUT (LOOP ${loopCount + 1})`, aiResponse);
+        if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
+            const { thought, text, isSilent } = parseAIOutput(aiResponse.text);
 
-    if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
-        const { thought, text, isSilent } = parseAIOutput(aiResponse.text);
+            if (thought) log.debug('AI_THOUGHT', `Jonquil Thought: ${thought}`);
 
-        if (thought) log.debug('AI_THOUGHT', `Jonquil Thought: ${thought}`);
+            newTurns.push({ role: 'assistant', content: aiResponse.text });
 
-        newTurns.push({ role: 'assistant', content: aiResponse.text });
+            saveToSession(lastMsg.chatId, newTurns);
 
-
-        saveToSession(lastMsg.chatId, newTurns);
-
-        if (isSilent) {
-            log.info('AI', `Jonquil didn't speak.`);
-            return new UniversalResponse({ text: null, actions: pendingGatewayActions });
-        }
-
-        log.success('AI', `Jonquil Response: ${text.substring(0, maxLogLength).replace(/\n/g, ' ')}...`);
-        return new UniversalResponse({ text: text, actions: pendingGatewayActions });
-    }
-
-    if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
-        const assistantToolTurn = { 
-            role: 'assistant', 
-            content: aiResponse.text || "", 
-            toolCalls: aiResponse.toolCalls 
-        };
-        history.push(assistantToolTurn);
-        newTurns.push(assistantToolTurn);
-
-        for (const call of aiResponse.toolCalls) {
-            log.info('AI', `Tool call: ${call.name}`);
-
-
-            const apiResult = await executeCapability(call.name, call.args, lastMsg);
-
-            let toolContent;
-            if (apiResult.gatewayAction) {
-                pendingGatewayActions.push(apiResult.gatewayAction);
-                toolContent = { success: true, status: "Action forwarded." };
-            } else {
-                toolContent = apiResult;
+            if (isSilent) {
+                log.info('AI', `Jonquil didn't speak.`);
+                return new UniversalResponse({ text: null, actions: pendingGatewayActions });
             }
 
-            const toolTurn = { role: 'tool', id: call.id, name: call.name, content: toolContent };
-
-            history.push(toolTurn);
-            newTurns.push(toolTurn);
+            log.success('AI', `Jonquil Response: ${text.substring(0, maxLogLength).replace(/\n/g, ' ')}...`);
+            return new UniversalResponse({ text: text, actions: pendingGatewayActions });
         }
-    }
-    loopCount++;
-}
 
-saveToSession(lastMsg.chatId, newTurns);
-return new UniversalResponse({ text: "I've done too much work and I'm tired right now, please ask again.", actions: pendingGatewayActions });
+        if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+            const assistantToolTurn = { 
+                role: 'assistant', 
+                content: aiResponse.text || "", 
+                toolCalls: aiResponse.toolCalls 
+            };
+            history.push(assistantToolTurn);
+            newTurns.push(assistantToolTurn);
+
+            for (const call of aiResponse.toolCalls) {
+                log.info('AI', `Tool call: ${call.name}`);
+
+                const apiResult = await executeCapability(call.name, call.args, lastMsg);
+
+                let toolContent;
+                if (apiResult.gatewayAction) {
+                    pendingGatewayActions.push(apiResult.gatewayAction);
+                    
+                    // Preserve tool output
+                    const { gatewayAction, ...restData } = apiResult;
+                    toolContent = { success: true, ...restData };
+                } else {
+                    toolContent = apiResult;
+                }
+
+                const toolTurn = { role: 'tool', id: call.id, name: call.name, content: toolContent };
+
+                history.push(toolTurn);
+                newTurns.push(toolTurn);
+            }
+        }
+        loopCount++;
+    }
+
+    saveToSession(lastMsg.chatId, newTurns);
+    return new UniversalResponse({ text: "I've done too much work and I'm tired right now, please ask again.", actions: pendingGatewayActions });
 }
 
 module.exports = handleMessageWithAI;
