@@ -14,7 +14,8 @@
     "dev:core": "npm run dev --workspace=core",
     "dev:wa": "npm run dev --workspace=gateways/whatsapp",
     "dev:tg": "npm run dev --workspace=gateways/telegram",
-    "dev:sim": "npm run dev --workspace=gateways/simulator"
+    "dev:sim": "npm run dev --workspace=gateways/simulator",
+    "dev:web": "npm run dev --workspace=gateways/web"
   },
   "keywords": [],
   "author": "The Jonquil AI Authors",
