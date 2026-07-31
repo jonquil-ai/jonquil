@@ -5,7 +5,7 @@ module.exports = {
     category: 'action',
     platforms: ['telegram', 'whatsapp'],
     schema: {
-        name: "itunes_api",
+        name: "music_search",
         description: "Provides direct access to the iTunes/Apple Music API. Use this to search for music, lookup discographies by ID, or play a 30-second audio track in the chat.",
         parameters: {
             type: "object",
