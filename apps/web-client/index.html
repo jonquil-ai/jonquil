@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jonquil AI — Web Client</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#FFD700',
+                            600: '#E6C200',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col justify-between antialiased selection:bg-amber-400 selection:text-zinc-950">
+
+    <!-- Header -->
+    <header class="border-b border-zinc-800 bg-zinc-900/60 backdrop-blur-md sticky top-0 z-10 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-zinc-950 font-bold text-xl shadow-lg shadow-amber-500/20">
+                🌼
+            </div>
+            <div>
+                <h1 class="font-bold text-base text-zinc-100 flex items-center gap-2">
+                    Jonquil AI <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/20">Web Client</span>
+                </h1>
+                <p class="text-xs text-zinc-400">Autonomous Cross-Platform Assistant</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="hidden sm:flex items-center gap-2 text-xs text-zinc-400 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="session-badge" class="font-mono text-zinc-300">Session: ...</span>
+            </div>
+            <button id="reset-session-btn" title="Reset Session" class="text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-800 p-2 rounded-lg border border-zinc-800 transition">
+                🔄 Reset
+            </button>
+        </div>
+    </header>
+
+    <!-- Chat Container -->
+    <main id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-4">
+        <!-- Welcome Message -->
+        <div class="flex items-start gap-3 max-w-2xl">
+            <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                🌼
+            </div>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none p-4 text-sm text-zinc-200 space-y-2 shadow-sm">
+                <p class="font-medium text-amber-400">Hey there! I'm Jonquil.</p>
+                <p>I live inside your chats. You can ask me anything, request calculations, search music, or flip a coin!</p>
+                <p class="text-xs text-zinc-400 border-t border-zinc-800/80 pt-2 mt-2">
+                    ⚡ Note: Demo API is rate-limited to 5 requests per minute per IP.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Input Area -->
+    <footer class="border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-md p-4 sticky bottom-0">
+        <div class="max-w-4xl mx-auto flex items-center gap-2">
+            <input 
+                type="text" 
+                id="message-input" 
+                placeholder="Type your message to Jonquil..." 
+                class="flex-1 bg-zinc-950 border border-zinc-800 focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/50 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition"
+                autocomplete="off"
+            />
+            <button 
+                id="send-btn" 
+                class="bg-amber-400 hover:bg-amber-300 active:scale-95 text-zinc-950 font-semibold px-5 py-3 rounded-xl text-sm transition flex items-center gap-2 shadow-lg shadow-amber-400/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <span>Send</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Script -->
+    <script>
+        const API_URL = 'http://localhost:4000/api/send';
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const sessionBadge = document.getElementById('session-badge');
+        const resetSessionBtn = document.getElementById('reset-session-btn');
+
+        function getSessionId() {
+            let sessionId = localStorage.getItem('jonquil_demo_session_id');
+            if (!sessionId) {
+                sessionId = 'web_demo_' + Math.random().toString(36).substring(2, 9);
+                localStorage.setItem('jonquil_demo_session_id', sessionId);
+            }
+            return sessionId;
+        }
+
+        let currentSessionId = getSessionId();
+        sessionBadge.textContent = 'Session: ' + currentSessionId;
+
+        resetSessionBtn.addEventListener('click', () => {
+            localStorage.removeItem('jonquil_demo_session_id');
+            currentSessionId = getSessionId();
+            sessionBadge.textContent = 'Session: ' + currentSessionId;
+            chatContainer.innerHTML = '';
+            appendSystemMessage('Session reset. Starting a fresh conversation!');
+        });
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function appendUserMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex items-start justify-end gap-3';
+            msgDiv.innerHTML = `
+                <div class="bg-amber-400 text-zinc-950 rounded-2xl rounded-tr-none p-4 text-sm font-medium max-w-xl shadow-md">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function appendAssistantMessage(rawText, actions = []) {
+            let thought = null;
+            let cleanText = rawText || "";
+
+            const thoughtMatch = cleanText.match(/<thought>([\s\S]*?)<\/thought>/);
+            if (thoughtMatch) {
+                thought = thoughtMatch[1].trim();
+                cleanText = cleanText.replace(/<thought>[\s\S]*?<\/thought>/, '').trim();
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex items-start gap-3 max-w-2xl';
+
+            let thoughtHtml = '';
+            if (thought) {
+                thoughtHtml = `
+                    <details class="mb-3 bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden group">
+                        <summary class="px-3 py-2 text-xs font-semibold text-amber-400/90 cursor-pointer hover:bg-zinc-900/50 flex items-center justify-between select-none">
+                            <span class="flex items-center gap-1.5">🧠 AI Thought Process</span>
+                            <span class="text-[10px] text-zinc-500 group-open:rotate-180 transition-transform">▼</span>
+                        </summary>
+                        <div class="p-3 text-xs font-mono text-zinc-400 border-t border-zinc-800/60 leading-relaxed whitespace-pre-wrap bg-zinc-950/40">
+                            ${escapeHtml(thought)}
+                        </div>
+                    </details>
+                `;
+            }
+
+            let actionsHtml = '';
+            if (actions && actions.length > 0) {
+                actionsHtml = actions.map(act => `
+                    <div class="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80 text-xs font-mono text-amber-400 flex items-center gap-2">
+                        <span>⚡ Action Executed:</span>
+                        <span class="text-zinc-300 font-semibold">${escapeHtml(act.type)}</span>
+                    </div>
+                `).join('');
+            }
+
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                    🌼
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none p-4 text-sm text-zinc-200 shadow-sm flex-1">
+                    ${thoughtHtml}
+                    <div class="leading-relaxed whitespace-pre-wrap">${escapeHtml(cleanText || "(Action Executed)")}</div>
+                    ${actionsHtml}
+                </div>
+            `;
+
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function appendSystemMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex justify-center my-2';
+            msgDiv.innerHTML = `
+                <div class="bg-zinc-900/80 border border-zinc-800 text-zinc-400 text-xs px-3 py-1.5 rounded-full">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function createTypingIndicator() {
+            const indicatorDiv = document.createElement('div');
+            indicatorDiv.id = 'typing-indicator';
+            indicatorDiv.className = 'flex items-start gap-3 max-w-2xl';
+            indicatorDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                    🌼
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-zinc-400 flex items-center gap-1.5 shadow-sm">
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                    <span class="text-xs text-zinc-500 ml-2 font-mono">Jonquil is thinking...</span>
+                </div>
+            `;
+            chatContainer.appendChild(indicatorDiv);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) indicator.remove();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            messageInput.value = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+
+            appendUserMessage(text);
+            createTypingIndicator();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, sessionId: currentSessionId })
+                });
+
+                const data = await response.json();
+                removeTypingIndicator();
+
+                if (!response.ok || !data.success) {
+                    appendSystemMessage(`⚠️ Error: ${data.error || 'Failed to connect to gateway.'}`);
+                } else if (data.reply) {
+                    appendAssistantMessage(data.reply.text, data.reply.actions);
+                }
+            } catch (err) {
+                removeTypingIndicator();
+                appendSystemMessage('⚠️ Connection error. Is Web Gateway running on port 4000?');
+            } finally {
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        messageInput.focus();
+    </script>
+</body>
+</html>
