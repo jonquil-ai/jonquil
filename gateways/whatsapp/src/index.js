@@ -39,6 +39,12 @@ async function connectToWhatsApp() {
             const response = await core.sendMessage(universalMessages);
             if (!response) return;
 
+            if (response.systemAction) {
+                log.info('WA_GATEWAY', `system action: ${response.systemAction}`);
+                await executeAction('system_ux', { actionType: response.systemAction, data: response.systemPayload }, { sock, universalMsg: lastUniversalMsg, rawMsg: lastRawMsg, log });
+                return; 
+            }
+
             // process texts
             if (response.text) {
                 if (config.readOnly) {
@@ -98,6 +104,8 @@ async function connectToWhatsApp() {
 
         const tempLog = logger.with(universalMsg);
         tempLog.info('WA_GATEWAY', `[Added to queue]: ${universalMsg.text.substring(0, maxLogLength)}`);
+
+        
 
         batcher.add(universalMsg.chatId, universalMsg, rawMsg);
     });

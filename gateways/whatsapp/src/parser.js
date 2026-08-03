@@ -1,3 +1,4 @@
+const { detectSystemEvent } = require('./intents');
 const { UniversalMessage } = require('@jonquil-ai/shared');
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 
@@ -58,6 +59,7 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
             quotedMessage = {
                 messageId: contextInfo.stanzaId,
                 senderId: contextInfo.participant,
+                remoteJid: contextInfo.remoteJid,
                 senderName: contextInfo.participant === senderId ? "Itself" : contextInfo.participant.split('@')[0],
                 text: extractText(contextInfo.quotedMessage),
                 mediaType: qMediaObj?.mediaType || null,
@@ -71,13 +73,16 @@ async function parseBaileysMessage(rawMsg, platformName, logger) {
 
     const timestamp = new Date(rawMsg.messageTimestamp * 1000).toISOString();
 
+    const systemEvent = detectSystemEvent(text);
+
     return new UniversalMessage({
         platform: platformName,
         messageId, chatId, senderId, senderName, isGroup, text, hasMedia,
         mediaType: mediaObj?.mediaType, 
         mediaData: mediaObj?.mediaData, 
         mediaMime: mediaObj?.mediaMime, 
-        quotedMessage, mentions, timestamp
+        quotedMessage, mentions, timestamp,
+        systemEvent: systemEvent
     });
 }
 
