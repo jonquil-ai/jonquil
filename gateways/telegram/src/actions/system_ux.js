@@ -1,4 +1,5 @@
 const { SystemActions } = require('@jonquil-ai/shared');
+const { t } = require('@jonquil-ai/l10n');
 
 module.exports = {
     name: 'system_ux',
@@ -8,13 +9,13 @@ module.exports = {
 
         switch (actionType) {
             case SystemActions.SHOW_TOS_PROMPT_DM:
-                await ctx.reply(`Hi! I'm Jonquil 🌼\nTo use my services, please read and accept our Terms of Service (${tosUrl}).\n\nReply with 'ACCEPT' or click /accept to continue.`);
+                await ctx.reply(t('SHOW_TOS_PROMPT_DM_TG', { tosUrl }));
                 break;
             case SystemActions.SHOW_TOS_PROMPT_GROUP:
-                await ctx.reply("Hi! To chat with me, you need to accept our Terms of Service. Please send me a DM with /accept.");
+                await ctx.reply(t('SHOW_TOS_PROMPT_GROUP_FALLBACK', { tosUrl }));
                 break;
             case SystemActions.TOS_APPROVED_SUCCESS:
-                await ctx.reply("✅ Awesome! You've accepted the terms. How can I help you today?");
+                await ctx.reply(t('TOS_APPROVED_SUCCESS'));
                 break;
             default:
                 log.warn('TG_ACTION', `unknown system action: ${actionType}`);
