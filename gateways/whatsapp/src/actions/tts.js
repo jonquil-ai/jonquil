@@ -15,8 +15,8 @@ module.exports = {
                 universalMsg.chatId, 
                 {
                     audio: buffer,
-                    mimetype: 'audio/ogg; codecs=opus',
-                    ptt: true
+                    mimetype: 'audio/mpeg', // todo -> convert to ogg opus with ffmpeg for PTT support
+                    ptt: false // must ogg
                 }, 
                 { quoted: rawMsg }
             );
