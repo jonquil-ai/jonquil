@@ -1,0 +1,3382 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: .agents/skills/**, .claude/skills/**, .github/**, JQID-*, *.MD, *.md, text.txt, core/src/ai/prompts/**, LICENSE, .gitignore, .gitattributes
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+apps/
+  web-client/
+    index.html
+core/
+  src/
+    ai/
+      providers/
+        gemini.js
+        mistral.js
+      contextBuilder.js
+      index.js
+      memory.js
+      taskLock.js
+    auth/
+      guard.js
+    tools/
+      imagine/
+        providers/
+          hf.js
+          pollinations.js
+        index.js
+      calculator.js
+      currency.js
+      diceAndCoin.js
+      index.js
+      musicSearch.js
+      react.js
+      sticker.js
+      translate.js
+      tts.js
+      weather.js
+      wiki.js
+    db.js
+    server.js
+  package.json
+gateways/
+  simulator/
+    src/
+      index.js
+      parser.js
+    chat.txt
+    package.json
+  telegram/
+    src/
+      actions/
+        index.js
+        react.js
+        sendMedia.js
+        system_ux.js
+      index.js
+      intents.js
+      parser.js
+    config.json
+    package.json
+  web/
+    src/
+      index.js
+    config.json
+    package.json
+  whatsapp/
+    src/
+      actions/
+        index.js
+        react.js
+        sendMedia.js
+        sticker.js
+        system_ux.js
+        tts.js
+      cache.js
+      index.js
+      intents.js
+      parser.js
+    config.json
+    package.json
+packages/
+  logger/
+    index.js
+    package.json
+  shared/
+    index.js
+    package.json
+prisma/
+  migrations/
+    20260802204656_init_system_identity/
+      migration.sql
+    migration_lock.toml
+  schema.prisma
+.env.example
+package.json
+prisma.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="core/src/auth/guard.js">
+const prisma = require('../db');
+const logger = require('@jonquil-ai/logger');
+const { SystemEvents, SystemActions } = require('@jonquil-ai/shared'); // YENİ
+
+const tosWarnedGroups = new Set();
+
+async function resolveIdentity(universalMsg) {
+    const { platform, senderId, isGroup, quotedMessage, chatId, systemEvent } = universalMsg;
+
+    let identity = await prisma.platformIdentity.findUnique({
+        where: { platform_realId: { platform: platform, realId: senderId } },
+        include: { user: { include: { tosAcceptances: true } } }
+    });
+
+    if (!identity) {
+        const cleanId = senderId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12);
+        const uid = `guest_${platform}_${cleanId}`; 
+        
+        const newUser = await prisma.user.create({
+            data: { uid, role: "GUEST", identities: { create: { platform, realId: senderId } } },
+            include: { tosAcceptances: true }
+        });
+        identity = { user: newUser };
+        logger.info('AUTH', `new guest provisioned: ${uid}`);
+    }
+
+    const user = identity.user;
+    const isTosAccepted = user.tosAcceptances && user.tosAcceptances.length > 0;
+
+    if (process.env.REQUIRE_TOS === 'true' && !isTosAccepted) {
+
+        if (systemEvent === SystemEvents.TOS_APPROVE) {
+            const sourceGroupId = quotedMessage ? quotedMessage.remoteJid : null;
+            await prisma.tosAcceptance.create({ data: { userId: user.id, platform, groupId: sourceGroupId } });
+            
+            logger.success('AUTH', `tos approved by: ${user.uid}`);
+            return { isTosBlocked: true, systemAction: SystemActions.TOS_APPROVED_SUCCESS };
+        }
+
+        if (isGroup) {
+            if (!tosWarnedGroups.has(chatId)) {
+                tosWarnedGroups.add(chatId);
+                setTimeout(() => tosWarnedGroups.delete(chatId), 15 * 60 * 1000);
+                return { isTosBlocked: true, systemAction: SystemActions.SHOW_TOS_PROMPT_GROUP, systemPayload: { groupId: chatId } };
+            }
+            return { isTosBlocked: true, systemAction: SystemActions.IGNORE };
+        } else {
+            return { isTosBlocked: true, systemAction: SystemActions.SHOW_TOS_PROMPT_DM };
+        }
+    }
+
+    return { isTosBlocked: false, uid: user.uid, role: user.role, personaSettings: user.personaSettings };
+}
+
+module.exports = { resolveIdentity };
+</file>
+
+<file path="core/src/tools/weather.js">
+const axios = require('axios');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "get_weather",
+        description: "It retrieves real-time weather data for a specified location. Always use this when a user asks about the weather.",
+        parameters: {
+            type: "object",
+            properties: {
+                location: {
+                    type: "string",
+                    description: "Name of the city or country for which weather forecast is desired (e.g., Ankara, New York)"
+                }
+            },
+            required: ["location"]
+        }
+    },
+
+    execute: async (args) => {
+        logger.info('TOOL', `get_weather running. Location: ${args.location}`);
+        try {
+            const url = `https://wttr.in/${encodeURIComponent(args.location)}?format=j1&lang=tr`;
+            const response = await axios.get(url);
+
+            const current = response.data.current_condition[0];
+            const area = response.data.nearest_area[0];
+
+            return {
+                success: true,
+                data: {
+                    city: area.areaName[0].value,
+                    country: area.country[0].value,
+                    temp_C: current.temp_C,
+                    feels_like_C: current.FeelsLikeC,
+                    condition: current.lang_tr ? current.lang_tr[0].value : current.weatherDesc[0].value,
+                    humidity: current.humidity
+                }
+            };
+        } catch (error) {
+            logger.error('TOOL', `get_weather error: ${error.message}`);
+            return { success: false, error: "Weather data could not be obtained." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/db.js">
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const path = require('path');
+const { PrismaClient } = require('@prisma/client');
+const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
+const Database = require('better-sqlite3');
+const logger = require('@jonquil-ai/logger');
+
+// resolve absolute path for self-hosting safety
+const rawUrl = process.env.DATABASE_URL || 'file:./system.db';
+const relativePath = rawUrl.replace('file:', '');
+const absoluteDbPath = path.resolve(__dirname, '../../', relativePath);
+
+const adapter = new PrismaBetterSqlite3({ url: `file:${absoluteDbPath}` });
+
+const prisma = new PrismaClient({
+    adapter,
+    log: process.env.AI_DEBUG_MODE === 'true' ? ['error', 'warn'] : ['error'],
+});
+
+logger.success('DATABASE', 'system database connected successfully.');
+
+module.exports = prisma;
+</file>
+
+<file path="gateways/telegram/src/actions/system_ux.js">
+const { SystemActions } = require('@jonquil-ai/shared');
+
+module.exports = {
+    name: 'system_ux',
+    execute: async (payload, { ctx, log }) => {
+        const { actionType } = payload;
+        const tosUrl = process.env.TOS_URL || "http://example.com/terms";
+
+        switch (actionType) {
+            case SystemActions.SHOW_TOS_PROMPT_DM:
+                await ctx.reply(`Hi! I'm Jonquil 🌼\nTo use my services, please read and accept our Terms of Service (${tosUrl}).\n\nReply with 'ACCEPT' or click /accept to continue.`);
+                break;
+            case SystemActions.SHOW_TOS_PROMPT_GROUP:
+                await ctx.reply("Hi! To chat with me, you need to accept our Terms of Service. Please send me a DM with /accept.");
+                break;
+            case SystemActions.TOS_APPROVED_SUCCESS:
+                await ctx.reply("✅ Awesome! You've accepted the terms. How can I help you today?");
+                break;
+            default:
+                log.warn('TG_ACTION', `unknown system action: ${actionType}`);
+        }
+    }
+};
+</file>
+
+<file path="gateways/telegram/src/intents.js">
+const { SystemEvents } = require('@jonquil-ai/shared');
+
+const INTENTS = [
+    { regex: /^(ACCEPT|AGREE|\/ACCEPT)$/i, systemEvent: SystemEvents.TOS_APPROVE }
+];
+
+function detectSystemEvent(text) {
+    if (!text) return null;
+    const cleanText = text.trim();
+    for (const intent of INTENTS) {
+        if (intent.regex.test(cleanText)) return intent.systemEvent;
+    }
+    return null;
+}
+module.exports = { detectSystemEvent };
+</file>
+
+<file path="gateways/whatsapp/src/actions/index.js">
+const fs = require('fs');
+const path = require('path');
+const log = require('@jonquil-ai/logger');
+
+const actions = new Map();
+
+const files = fs.readdirSync(__dirname).filter(file => file.endsWith('.js') && file !== 'index.js');
+
+for (const file of files) {
+    const action = require(path.join(__dirname, file));
+    if (action.name) {
+        actions.set(action.name, action);
+    }
+}
+
+log.success('WA_GATEWAY', `${actions.size} number of Actions are ready.`);
+
+async function executeAction(actionType, payload, context) {
+    const action = actions.get(actionType);
+    if (!action) {
+        log.warn('WA_GATEWAY', `Action not found: ${actionType}`);
+        return;
+    }
+    await action.execute(payload, context);
+}
+
+module.exports = { executeAction };
+</file>
+
+<file path="gateways/whatsapp/src/actions/react.js">
+module.exports = {
+    name: 'react',
+    execute: async (payload, { sock, universalMsg, log }) => {
+        try {
+            await sock.sendMessage(universalMsg.chatId, {
+                react: {
+                    text: payload.emoji,
+                    key: {
+                        id: payload.targetId,
+                        remoteJid: universalMsg.chatId,
+                        participant: universalMsg.senderId
+                    }
+                }
+            });
+            log.success('ACTION', `react: ${payload.emoji}`);
+        } catch (error) {
+            log.error('ACTION', 'react', error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/whatsapp/src/actions/system_ux.js">
+const { SystemActions } = require('@jonquil-ai/shared');
+
+module.exports = {
+    name: 'system_ux',
+    execute: async (payload, { sock, universalMsg, rawMsg, log }) => {
+        const { actionType, data } = payload;
+        const tosUrl = process.env.TOS_URL || "http://example.com/terms";
+
+        switch (actionType) {
+            case SystemActions.SHOW_TOS_PROMPT_DM:
+                await sock.sendMessage(universalMsg.chatId, { text: `Hi! I'm Jonquil 🌼\nTo use my services, please read and accept our Terms of Service (${tosUrl}).\n\nReply with 'ACCEPT' to continue.` });
+                break;
+                
+            case SystemActions.SHOW_TOS_PROMPT_GROUP:
+                const groupId = data.groupId;
+                const targetUserId = universalMsg.senderId;
+                const targetUserName = universalMsg.senderName;
+                try {
+                    const groupMetadata = await sock.groupMetadata(groupId);
+                    await sock.sendMessage(targetUserId, { text: `Hi ${targetUserName}! I'm Jonquil 🌼, the assistant in the *"${groupMetadata.subject}"* group.\n\nYou called me there, but to use my services, you need to accept our Terms of Service (${tosUrl}).\n\nIf you agree, please reply here with 'ACCEPT'.` });
+                    log.info('UX', `group contextual tos prompt sent to dm: ${groupMetadata.subject}`);
+                } catch (err) {
+                    await sock.sendMessage(targetUserId, { text: `Hi! You called me in a group, but to use my services, you need to accept our Terms of Service (${tosUrl}).\n\nPlease reply here with 'ACCEPT'.` });
+                }
+                break;
+
+            case SystemActions.TOS_APPROVED_SUCCESS:
+                await sock.sendMessage(universalMsg.chatId, { text: "✅ Awesome! You've accepted the terms. How can I help you today?" }, { quoted: rawMsg });
+                break;
+                
+            default:
+                log.warn('UX', `unknown system action: ${actionType}`);
+        }
+    }
+};
+</file>
+
+<file path="gateways/whatsapp/src/intents.js">
+const { SystemEvents } = require('@jonquil-ai/shared');
+
+const INTENTS = [
+    { regex: /^(ACCEPT|AGREE|I AGREE|YES)$/i, systemEvent: SystemEvents.TOS_APPROVE }
+];
+
+function detectSystemEvent(text) {
+    if (!text) return null;
+    const cleanText = text.trim();
+    for (const intent of INTENTS) {
+        if (intent.regex.test(cleanText)) return intent.systemEvent;
+    }
+    return null;
+}
+module.exports = { detectSystemEvent };
+</file>
+
+<file path="packages/logger/package.json">
+{
+  "name": "@jonquil-ai/logger",
+  "version": "1.0.0",
+  "main": "index.js"
+}
+</file>
+
+<file path="packages/shared/package.json">
+{
+    "name": "@jonquil-ai/shared",
+    "version": "1.0.0",
+    "main": "index.js"
+}
+</file>
+
+<file path="prisma/migrations/20260802204656_init_system_identity/migration.sql">
+-- CreateTable
+CREATE TABLE "User" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "uid" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'GUEST',
+    "personaSettings" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "PlatformIdentity" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "platform" TEXT NOT NULL,
+    "realId" TEXT NOT NULL,
+    "maskedId" TEXT,
+    CONSTRAINT "PlatformIdentity_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "TosAcceptance" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "userId" INTEGER NOT NULL,
+    "platform" TEXT NOT NULL,
+    "groupId" TEXT,
+    "acceptedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "TosAcceptance_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_uid_key" ON "User"("uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PlatformIdentity_platform_realId_key" ON "PlatformIdentity"("platform", "realId");
+</file>
+
+<file path="prisma/migrations/migration_lock.toml">
+# Please do not edit this file manually
+# It should be added in your version-control system (e.g., Git)
+provider = "sqlite"
+</file>
+
+<file path="prisma/schema.prisma">
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x", "windows"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 1. ANA KİMLİK TABLOSU
+model User {
+  id               Int                @id @default(autoincrement())
+  uid              String             @unique // Eski jqid. Örn: guest_telegram_123
+  role             String             @default("GUEST") 
+  personaSettings  String?            
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  identities       PlatformIdentity[]
+  tosAcceptances   TosAcceptance[]
+}
+
+// 2. BAĞLI CİHAZLAR VE KANALLAR
+model PlatformIdentity {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  platform  String   
+  realId    String   
+  maskedId  String?  
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, realId])
+}
+
+// 3. TOS (KVKK) ONAY LOGLARI
+model TosAcceptance {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  platform    String   
+  groupId     String?  
+  acceptedAt  DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+</file>
+
+<file path="prisma.config.ts">
+// This file was generated by Prisma, and assumes you have installed the following:
+// npm install --save-dev prisma dotenv
+import "dotenv/config";
+import { defineConfig } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: {
+    url: process.env["DATABASE_URL"],
+  },
+});
+</file>
+
+<file path="apps/web-client/index.html">
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jonquil AI — Web Client</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#FFD700',
+                            600: '#E6C200',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col justify-between antialiased selection:bg-amber-400 selection:text-zinc-950">
+
+    <!-- Header -->
+    <header class="border-b border-zinc-800 bg-zinc-900/60 backdrop-blur-md sticky top-0 z-10 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-zinc-950 font-bold text-xl shadow-lg shadow-amber-500/20">
+                🌼
+            </div>
+            <div>
+                <h1 class="font-bold text-base text-zinc-100 flex items-center gap-2">
+                    Jonquil AI <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/20">Web Client</span>
+                </h1>
+                <p class="text-xs text-zinc-400">Autonomous Cross-Platform Assistant</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="hidden sm:flex items-center gap-2 text-xs text-zinc-400 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="session-badge" class="font-mono text-zinc-300">Session: ...</span>
+            </div>
+            <button id="reset-session-btn" title="Reset Session" class="text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-800 p-2 rounded-lg border border-zinc-800 transition">
+                🔄 Reset
+            </button>
+        </div>
+    </header>
+
+    <!-- Chat Container -->
+    <main id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl w-full mx-auto space-y-4">
+        <!-- Welcome Message -->
+        <div class="flex items-start gap-3 max-w-2xl">
+            <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                🌼
+            </div>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none p-4 text-sm text-zinc-200 space-y-2 shadow-sm">
+                <p class="font-medium text-amber-400">Hey there! I'm Jonquil.</p>
+                <p>I live inside your chats. You can ask me anything, request calculations, search music, or flip a coin!</p>
+                <p class="text-xs text-zinc-400 border-t border-zinc-800/80 pt-2 mt-2">
+                    ⚡ Note: Demo API is rate-limited to 5 requests per minute per IP.
+                </p>
+            </div>
+        </div>
+
+<!-- TOS Modal -->
+        <div id="tos-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+                <div class="text-4xl mb-4">📜</div>
+                <h2 class="text-xl font-bold text-amber-400 mb-2">Terms of Service</h2>
+                <p class="text-sm text-zinc-400 mb-4">To use Jonquil, please read and accept our <a href="#" class="text-amber-400 underline">Terms of Service</a> & Privacy Policy.</p>
+                <button onclick="acceptTos()" class="bg-amber-400 hover:bg-amber-300 text-zinc-950 font-bold px-6 py-3 rounded-xl w-full transition">I Accept</button>
+            </div>
+        </div>
+    
+    </main>
+
+    <!-- Input Area -->
+    <footer class="border-t border-zinc-800 bg-zinc-900/80 backdrop-blur-md p-4 sticky bottom-0">
+        <div class="max-w-4xl mx-auto flex items-center gap-2">
+            <input 
+                type="text" 
+                id="message-input" 
+                placeholder="Type your message to Jonquil..." 
+                class="flex-1 bg-zinc-950 border border-zinc-800 focus:border-amber-400/50 focus:ring-1 focus:ring-amber-400/50 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition"
+                autocomplete="off"
+            />
+            <button 
+                id="send-btn" 
+                class="bg-amber-400 hover:bg-amber-300 active:scale-95 text-zinc-950 font-semibold px-5 py-3 rounded-xl text-sm transition flex items-center gap-2 shadow-lg shadow-amber-400/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <span>Send</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Script -->
+    <script>
+        const API_URL = 'http://localhost:4000/api/send';
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const sessionBadge = document.getElementById('session-badge');
+        const resetSessionBtn = document.getElementById('reset-session-btn');
+
+        function getSessionId() {
+            let sessionId = localStorage.getItem('jonquil_demo_session_id');
+            if (!sessionId) {
+                sessionId = 'web_demo_' + Math.random().toString(36).substring(2, 9);
+                localStorage.setItem('jonquil_demo_session_id', sessionId);
+            }
+            return sessionId;
+        }
+
+        let currentSessionId = getSessionId();
+        sessionBadge.textContent = 'Session: ' + currentSessionId;
+
+        resetSessionBtn.addEventListener('click', () => {
+            localStorage.removeItem('jonquil_demo_session_id');
+            currentSessionId = getSessionId();
+            sessionBadge.textContent = 'Session: ' + currentSessionId;
+            chatContainer.innerHTML = '';
+            appendSystemMessage('Session reset. Starting a fresh conversation!');
+        });
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function appendUserMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex items-start justify-end gap-3';
+            msgDiv.innerHTML = `
+                <div class="bg-amber-400 text-zinc-950 rounded-2xl rounded-tr-none p-4 text-sm font-medium max-w-xl shadow-md">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function appendAssistantMessage(rawText, actions = []) {
+            let thought = null;
+            let cleanText = rawText || "";
+
+            const thoughtMatch = cleanText.match(/<thought>([\s\S]*?)<\/thought>/);
+            if (thoughtMatch) {
+                thought = thoughtMatch[1].trim();
+                cleanText = cleanText.replace(/<thought>[\s\S]*?<\/thought>/, '').trim();
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex items-start gap-3 max-w-2xl';
+
+            let thoughtHtml = '';
+            if (thought) {
+                thoughtHtml = `
+                    <details class="mb-3 bg-zinc-950/80 border border-zinc-800 rounded-xl overflow-hidden group">
+                        <summary class="px-3 py-2 text-xs font-semibold text-amber-400/90 cursor-pointer hover:bg-zinc-900/50 flex items-center justify-between select-none">
+                            <span class="flex items-center gap-1.5">🧠 AI Thought Process</span>
+                            <span class="text-[10px] text-zinc-500 group-open:rotate-180 transition-transform">▼</span>
+                        </summary>
+                        <div class="p-3 text-xs font-mono text-zinc-400 border-t border-zinc-800/60 leading-relaxed whitespace-pre-wrap bg-zinc-950/40">
+                            ${escapeHtml(thought)}
+                        </div>
+                    </details>
+                `;
+            }
+
+            let actionsHtml = '';
+            if (actions && actions.length > 0) {
+                actionsHtml = actions.map(act => `
+                    <div class="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-zinc-800/80 text-xs font-mono text-amber-400 flex items-center gap-2">
+                        <span>⚡ Action Executed:</span>
+                        <span class="text-zinc-300 font-semibold">${escapeHtml(act.type)}</span>
+                    </div>
+                `).join('');
+            }
+
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                    🌼
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none p-4 text-sm text-zinc-200 shadow-sm flex-1">
+                    ${thoughtHtml}
+                    <div class="leading-relaxed whitespace-pre-wrap">${escapeHtml(cleanText || "(Action Executed)")}</div>
+                    ${actionsHtml}
+                </div>
+            `;
+
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function appendSystemMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex justify-center my-2';
+            msgDiv.innerHTML = `
+                <div class="bg-zinc-900/80 border border-zinc-800 text-zinc-400 text-xs px-3 py-1.5 rounded-full">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            chatContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        function createTypingIndicator() {
+            const indicatorDiv = document.createElement('div');
+            indicatorDiv.id = 'typing-indicator';
+            indicatorDiv.className = 'flex items-start gap-3 max-w-2xl';
+            indicatorDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 shrink-0">
+                    🌼
+                </div>
+                <div class="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-zinc-400 flex items-center gap-1.5 shadow-sm">
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                    <span class="text-xs text-zinc-500 ml-2 font-mono">Jonquil is thinking...</span>
+                </div>
+            `;
+            chatContainer.appendChild(indicatorDiv);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) indicator.remove();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            messageInput.value = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+
+            appendUserMessage(text);
+            createTypingIndicator();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, sessionId: currentSessionId })
+                });
+
+                const data = await response.json();
+                removeTypingIndicator();
+
+                if (!response.ok || !data.success) {
+                    appendSystemMessage(`⚠️ Error: ${data.error || 'Bağlantı hatası.'}`);
+                } else if (data.reply.systemAction) {
+                    if (data.reply.systemAction.includes('SHOW_TOS_PROMPT')) {
+                        document.getElementById('tos-modal').classList.remove('hidden');
+                        // Modal açılınca arkadaki input'u KİLİTLE!
+                        messageInput.disabled = true;
+                        sendBtn.disabled = true;
+                    } else if (data.reply.systemAction === 'TOS_APPROVED_SUCCESS') {
+                        appendSystemMessage("✅ Şartlar onaylandı. Sohbete başlayabilirsiniz!");
+                    }
+                } else if (data.reply.text) {
+                    // NORMAL YAPAY ZEKA CEVABI
+                    appendAssistantMessage(data.reply.text, data.reply.actions);
+                }
+
+            } catch (err) {
+                removeTypingIndicator();
+                appendSystemMessage('⚠️ Connection error. Is Web Gateway running on port 4000?');
+            } finally {
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        messageInput.focus();
+
+        async function acceptTos() {
+            document.getElementById('tos-modal').classList.add('hidden');
+            createTypingIndicator();
+            
+            try {
+                // pure api call, no fake input injection
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: "", sessionId: currentSessionId, systemEvent: "TOS_APPROVE" })
+                });
+
+                const data = await response.json();
+                removeTypingIndicator();
+
+                if (data.success && data.reply && data.reply.systemAction === 'TOS_APPROVED_SUCCESS') {
+                    appendSystemMessage("✅ Terms accepted. You can now start chatting!");
+                } else {
+                    appendSystemMessage("⚠️ Failed to accept terms.");
+                }
+            } catch (err) {
+                removeTypingIndicator();
+                appendSystemMessage('⚠️ Connection error.');
+            }
+        }
+        
+    </script>
+</body>
+</html>
+</file>
+
+<file path="core/src/ai/providers/mistral.js">
+const { Mistral } = require('@mistralai/mistralai');
+
+class MistralProvider {
+    constructor() {
+        if (!process.env.MISTRAL_KEY) throw new Error("MISTRAL_KEY is missing!");
+        this.client = new Mistral({ apiKey: process.env.MISTRAL_KEY });
+        this.modelName = process.env.MISTRAL_MODEL || 'mistral-large-latest';
+    }
+
+    _formatTools(universalTools) {
+        if (!universalTools || universalTools.length === 0) return undefined;
+        return universalTools.map(tool => ({
+            type: "function",
+            function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters
+            }
+        }));
+    }
+
+    _formatHistory(universalHistory) {
+        return universalHistory.map(msg => {
+            if (msg.role === 'system') return { role: 'system', content: msg.content };
+            if (msg.role === 'user') return { role: 'user', content: msg.content }; 
+            if (msg.role === 'assistant') {
+                if (msg.toolCalls) {
+                    return {
+                        role: 'assistant',
+                        content: msg.content || "",
+                        tool_calls: msg.toolCalls.map(tc => ({
+                            id: tc.id, 
+                            type: 'function',
+                            function: { name: tc.name, arguments: JSON.stringify(tc.args) }
+                        }))
+                    };
+                }
+                return { role: 'assistant', content: msg.content };
+            }
+            if (msg.role === 'tool') {
+                return {
+                    role: 'tool',
+                    tool_call_id: msg.id,
+                    name: msg.name,
+                    content: JSON.stringify(msg.content)
+                };
+            }
+        }).filter(Boolean);
+    }
+
+    async generate(history, tools) {
+        const messages = this._formatHistory(history);
+        const formattedTools = this._formatTools(tools);
+
+        const response = await this.client.chat.complete({
+            model: this.modelName,
+            messages: messages,
+            tools: formattedTools,
+            temperature: 0.7,
+            tool_choice: "auto"
+        });
+
+        const choice = response.choices[0].message;
+        const output = { text: choice.content || null, toolCalls: [] };
+
+        if (choice.tool_calls && choice.tool_calls.length > 0) {
+            output.toolCalls = choice.tool_calls.map(call => ({
+                id: call.id, 
+                name: call.function.name,
+                args: JSON.parse(call.function.arguments)
+            }));
+        }
+
+        return output;
+    }
+}
+
+module.exports = new MistralProvider();
+</file>
+
+<file path="core/src/ai/taskLock.js">
+const logger = require('@jonquil-ai/logger');
+
+const chatQueues = new Map();
+const isProcessing = new Map();
+
+async function enqueueTask(chatId, task) {
+    if (!chatQueues.has(chatId)) {
+        chatQueues.set(chatId, []);
+    }
+    
+    chatQueues.get(chatId).push(task);
+    
+    processNext(chatId);
+}
+
+async function processNext(chatId) {
+
+    if (isProcessing.get(chatId)) return;
+
+    const queue = chatQueues.get(chatId);
+    if (!queue || queue.length === 0) return;
+
+    isProcessing.set(chatId, true);
+    
+
+    const nextTask = queue.shift();
+
+    try {
+        await nextTask();
+    } catch (error) {
+        logger.error('QUEUE', `Task execution error for ${chatId}:`, error.message);
+    } finally {
+
+        isProcessing.set(chatId, false);     
+        processNext(chatId);
+    }
+}
+
+module.exports = { enqueueTask };
+</file>
+
+<file path="core/src/tools/imagine/providers/pollinations.js">
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    name: 'pollinations',
+    generate: async (prompt) => {
+        logger.info('TOOL', `Pollinations generating image: "${prompt.substring(0, 30)}..."`);
+        const seed = Math.floor(Math.random() * 1000000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&seed=${seed}&nologo=true`;
+        
+        return { success: true, url: imageUrl, provider: 'pollinations' };
+    }
+};
+</file>
+
+<file path="core/src/tools/currency.js">
+const axios = require('axios');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "get_currency_rate",
+        description: "It retrieves exchange rates and currency conversions. (e.g., How much is 50 USD in TRY, or what is the EUR exchange rate?)",
+        parameters: {
+            type: "object",
+            properties: {
+                amount: { type: "number", description: "Amount of currency (If not specified, assume 1)" },
+                base: { type: "string", description: "Base currency code (e.g., USD, EUR, TRY)" },
+                target: { type: "string", description: "Target currency code (e.g., USD, EUR, TRY)" }
+            },
+            required: ["base", "target"]
+        }
+    },
+    execute: async (args) => {
+        logger.info('TOOL', `currency running: ${args.amount || 1} ${args.base} -> ${args.target}`);
+        try {
+            const amount = args.amount || 1;
+            const res = await axios.get(`https://api.exchangerate-api.com/v4/latest/${args.base.toUpperCase()}`);
+            const rate = res.data.rates[args.target.toUpperCase()];
+            if (!rate) return { success: false, error: "Target currency not found." };
+            
+            return { success: true, base: args.base, target: args.target, amount, rate, calculatedResult: (amount * rate).toFixed(2) };
+        } catch (error) {
+            logger.error('TOOL', `Currency error: ${error.message}`);
+            return { success: false, error: "Currency rate information could not be retrieved." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/diceAndCoin.js">
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "dice_coin_rolling",
+        description: "It is used for rolling dice or flipping a coin. Call it when the user is undecided or wants a game of chance.",
+        parameters: {
+            type: "object",
+            properties: {
+                action: { 
+                    type: "string", 
+                    description: "Which game of chance: 'dice' or 'coin'?" 
+                },
+                count: { 
+                    type: "number", 
+                    description: "How many times it will be applied (e.g., 2 dice or 3 coins). If not specified, the default is 1." 
+                }
+            },
+            required: ["action"]
+        }
+    },
+    execute: async (args) => {
+        const count = args.count || 1;
+        const action = args.action;
+        
+        logger.info('TOOL', `random_chance running: ${action} (${count} times)`);
+        
+        let results = [];
+        
+        try {
+            if (action === 'dice') {
+                // Rolling the dice
+                for (let i = 0; i < count; i++) {
+                    results.push(Math.floor(Math.random() * 6) + 1);
+                }
+            } else if (action === 'coin') {
+                // heads or tails
+                const sides = ['Heads', 'Tails'];
+                for (let i = 0; i < count; i++) {
+                    results.push(sides[Math.floor(Math.random() * 2)]);
+                }
+            } else {
+                return { success: false, error: "Unknown action. Please use 'dice' or 'coin'." };
+            }
+            
+            // Sonucu AI'a geri döndür
+            return { 
+                success: true, 
+                action: action,
+                count: count,
+                results: results,
+                total: action === 'dice' ? results.reduce((a, b) => a + b, 0) : undefined
+            };
+        } catch (error) {
+            logger.error('TOOL', `change tool error: ${error.message}`);
+            return { success: false, error: "There was a problem during the dice/coin roll." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/index.js">
+const fs = require('fs');
+const path = require('path');
+const logger = require('@jonquil-ai/logger');
+
+const capabilities = new Map();
+
+const items = fs.readdirSync(__dirname);
+
+for (const item of items) {
+    if (item === 'index.js') continue;
+
+    const fullPath = path.join(__dirname, item);
+    const stat = fs.statSync(fullPath);
+
+    let moduleItem = null;
+
+    if (stat.isFile() && item.endsWith('.js')) {
+        moduleItem = require(fullPath);
+    } else if (stat.isDirectory()) {
+        const indexPath = path.join(fullPath, 'index.js');
+        if (fs.existsSync(indexPath)) {
+            moduleItem = require(indexPath);
+        }
+    }
+
+    if (moduleItem && moduleItem.schema && moduleItem.schema.name) {
+        capabilities.set(moduleItem.schema.name, moduleItem);
+    }
+}
+
+logger.success('CORE', `${capabilities.size} Skills (Tools/Actions) have been loaded.`);
+
+function getSchemasForPlatform(platformName) {
+    const schemas = [];
+    capabilities.forEach((item) => {
+        if (item.platforms.includes('all') || item.platforms.includes(platformName)) {
+            schemas.push(item.schema);
+        }
+    });
+    return schemas;
+}
+
+async function executeCapability(name, args, context) {
+    const item = capabilities.get(name);
+    
+    if (!item) return { success: false, error: `Action not found: ${name}.` };
+
+    if (!item.platforms.includes('all') && !item.platforms.includes(context.platform)) {
+        return { success: false, error: `This action is not supported on platform '${context.platform}'.` };
+    }
+
+    return await item.execute(args, context);
+}
+
+module.exports = { getSchemasForPlatform, executeCapability };
+</file>
+
+<file path="core/src/tools/react.js">
+const log = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'action',
+    platforms: ['whatsapp', 'telegram', 'discord'],
+
+    schema: {
+        name: "leave_reaction",
+        description: "The user leaves an emoji (reaction) to the message.",
+        parameters: {
+            type: "object",
+            properties: {
+                emoji: { type: "string", description: "emoji_type: The one emoji you want to leave (example: 👍)" },
+                message_id: { type: "string", description: "The ID of the message to react to." },
+            },
+            required: ["emoji"]
+        }
+    },
+
+    execute: async (args, messageContext) => {
+        log.info('ACTION', `leave_reaction running. Emoji: ${args.emoji}`);
+
+        return {
+            success: true,
+            gatewayAction: {
+                type: 'react',
+                payload: {
+                    emoji: args.emoji,
+                    targetId: args.message_id || messageContext.messageId
+                }
+            }
+        };
+    }
+};
+</file>
+
+<file path="core/src/tools/translate.js">
+const { translate } = require('google-translate-api-x');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "translate_text",
+        description: "It translates texts from one language to another. To avoid confusion with homonyms, you can specify the source language (from).",
+        parameters: {
+            type: "object",
+            properties: {
+                text: { type: "string", description: "Text to be translated" },
+                to: { type: "string", description: "Target language code (e.g., en, tr, de, es)" },
+                from: { type: "string", description: "Source language code. If you understand the language from the context, be sure to specify it. If you are unsure, you can leave it as 'auto'. (e.g., en, fr, auto)" }
+            },
+            required: ["text", "to"]
+        }
+    },
+    execute: async (args) => {
+        const fromLang = args.from || 'auto';
+        logger.info('TOOL', `translate_text running: [${fromLang} -> ${args.to}] Text: "${args.text.substring(0,15)}..."`);
+        
+        try {
+
+            const res = await translate(args.text, { from: fromLang, to: args.to, autoCorrect: true });
+            
+            return { 
+                success: true, 
+                original: args.text, 
+                translated: res.text, 
+                detectedSource: res.from.language.iso, 
+                requestedSource: fromLang 
+            };
+        } catch (error) {
+            logger.error('TOOL', `Translate error: ${error.message}`);
+            return { success: false, error: "Translation failed." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/tts.js">
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'action',
+    platforms: ['whatsapp', 'telegram'],
+    schema: {
+        name: "send_voice_message",
+        description: "It converts the text into a voice recording and sends it to the user.",
+        parameters: {
+            type: "object",
+            properties: {
+                text: { type: "string", description: "Text to be converted into speech" },
+                lang: { type: "string", description: "Language code (e.g., tr, en, es)" }
+            },
+            required: ["text", "lang"]
+        }
+    },
+    execute: async (args, messageContext) => {
+        logger.info('ACTION', `tts running... Text: ${args.text.substring(0, 20)}...`);
+        return {
+            success: true,
+            gatewayAction: {
+                type: 'tts',
+                payload: { text: args.text, lang: args.lang, targetId: messageContext.messageId }
+            }
+        };
+    }
+};
+</file>
+
+<file path="core/src/tools/wiki.js">
+const axios = require('axios');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "wikipedia_search",
+        description: "Searching Wikipedia brings up summary information about people, places, or concepts.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "Search word or topic" },
+                lang: { type: "string", description: "The language code to search for (e.g., tr, en). Default: en" }
+            },
+            required: ["query"]
+        }
+    },
+    execute: async (args) => {
+        const lang = args.lang || 'en';
+        logger.info('TOOL', `wiki running. Query: ${args.query} (${lang})`);
+        try {
+            const searchRes = await axios.get(`https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(args.query)}&limit=1&format=json`);
+            const title = searchRes.data[1][0];
+            const link = searchRes.data[3][0];
+            
+            if (!title) return { success: false, error: "No results were found on Wikipedia." };
+
+            const summaryRes = await axios.get(`https://${lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&redirects=1&format=json&titles=${encodeURIComponent(title)}`);
+            const pages = summaryRes.data.query.pages;
+            const extract = pages[Object.keys(pages)[0]].extract;
+
+            return { success: true, title, summary: extract.substring(0, 800), link };
+        } catch (error) {
+            logger.error('TOOL', `Wiki error: ${error.message}`);
+            return { success: false, error: "Wikipedia is unreachable." };
+        }
+    }
+};
+</file>
+
+<file path="gateways/simulator/src/index.js">
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+const logger = require('@jonquil-ai/logger');
+const { CoreClient } = require('@jonquil-ai/shared');
+const { parseExportLine } = require('./parser');
+
+const core = new CoreClient('http://localhost:3000/api/chat');
+const chatFilePath = path.join(__dirname, '../chat.txt');
+
+if (!fs.existsSync(chatFilePath)) {
+    logger.error('SIMULATOR', 'chat.txt missing!');
+    process.exit(1);
+}
+
+const fileStream = fs.createReadStream(chatFilePath);
+const rlFile = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+const rlConsole = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+async function runSimulation() {
+    logger.info('SIMULATOR', 'Connected!');
+    logger.info('SIMULATOR', 'Press [ENTER] to send the next message.\n');
+
+    for await (const line of rlFile) {
+        const universalMsg = parseExportLine(line);
+        
+        if (!universalMsg) continue;
+
+        await new Promise(resolve => rlConsole.question(`\x1b[33mNext Message: [${universalMsg.senderName}] ${universalMsg.text}\x1b[0m (Press ENTER to send)`, resolve));
+
+        const log = logger.with(universalMsg);
+        log.info('SIM_GATEWAY', `Message sent.`);
+        console.log("--------------------------------------------------\n");
+
+        core.sendMessage(universalMsg).then(response => {
+            if (!response) return;
+
+            if (response.text) {
+                log.success('SIM_GATEWAY', `Jonquil Response: ${response.text}`);
+            }
+
+            if (response.actions && response.actions.length > 0) {
+                for (const action of response.actions) {
+                    log.debug('SIM_GATEWAY', `[Action Triggered]: ${action.type}`, action.payload);
+                }
+            }
+        }).catch(error => {
+            log.error('SIM_GATEWAY', 'Core error:', error.message);
+        });
+    }
+
+    logger.success('SIMULATOR', 'Simulation has ended.');
+    process.exit(0);
+}
+
+runSimulation();
+</file>
+
+<file path="gateways/simulator/src/parser.js">
+const { UniversalMessage } = require('@jonquil-ai/shared');
+
+// WhatsApp Export Regex
+// iOS format: [28.07.2026 01:10:05] User: Msg
+// Android format: 28.07.2026 01:10 - User: Msg
+const waExportRegex = /^\[?(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}[, ]+\d{1,2}:\d{2}(?::\d{2})?)\]?\s*(?:-)?\s*(.+?):\s(.*)$/;
+
+function parseExportLine(line) {
+    const match = line.match(waExportRegex);
+    if (!match) return null;
+
+    const rawDate = match[1];
+    const senderName = match[2].trim();
+    const text = match[3].trim();
+
+    const messageId = 'SIM_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    return new UniversalMessage({
+        platform: 'sim',
+        messageId: messageId,
+        chatId: 'sim_group_test',
+        senderId: senderName.toLowerCase() + '@sim.whatsapp',
+        senderName: senderName,
+        isGroup: true,
+        text: text,
+        timestamp: new Date().toISOString()
+    });
+}
+
+module.exports = { parseExportLine };
+</file>
+
+<file path="gateways/simulator/chat.txt">
+[28.07.2026 01:10:05] James: Hey guys!
+[28.07.2026 01:10:15] David: Oh, hi James, how are you?
+[28.07.2026 01:10:20] James: I'm good, nothing much. Jonquil, how are you?
+[28.07.2026 01:12:30] Mary: James, are we meeting tomorrow night?
+[28.07.2026 01:12:45] David: Yes, yes, the plan hasn't been cancelled.
+[28.07.2026 01:15:00] James: Great. I wonder what the weather will be like tomorrow night? Jonquil, take a look.
+</file>
+
+<file path="gateways/simulator/package.json">
+{
+    "name": "@jonquil-ai/simulator",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+      "dev": "node src/index.js"
+    }
+  }
+</file>
+
+<file path="gateways/telegram/src/actions/index.js">
+const fs = require('fs');
+const path = require('path');
+const logger = require('@jonquil-ai/logger');
+
+const actions = new Map();
+const files = fs.readdirSync(__dirname).filter(file => file.endsWith('.js') && file !== 'index.js');
+
+for (const file of files) {
+    const action = require(path.join(__dirname, file));
+    if (action.name) actions.set(action.name, action);
+}
+
+logger.success('TG_GATEWAY', `${actions.size} number of Actions are ready.`);
+
+async function executeAction(actionType, payload, context) {
+    const action = actions.get(actionType);
+    if (!action) {
+        logger.warn('TG_GATEWAY', `Unknown action: ${actionType}`);
+        return;
+    }
+    await action.execute(payload, context);
+}
+
+module.exports = { executeAction };
+</file>
+
+<file path="gateways/telegram/src/actions/react.js">
+module.exports = {
+    name: 'react',
+    execute: async (payload, { ctx, log }) => {
+        try {
+            await ctx.telegram.setMessageReaction(ctx.chat.id, parseInt(payload.targetId), [{ type: 'emoji', emoji: payload.emoji }]);
+            log.success('TG_ACTION', `react: ${payload.emoji}`);
+        } catch (error) {
+            log.error('TG_ACTION', 'react error:', error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/telegram/src/actions/sendMedia.js">
+module.exports = {
+    name: 'send_media',
+    execute: async (payload, { ctx, log }) => {
+        try {
+            const mediaType = payload.mediaType || 'image';
+            const caption = payload.caption || "";
+            const replyOptions = {
+                caption,
+                reply_parameters: { message_id: ctx.message.message_id }
+            };
+
+            const source = payload.url 
+                ? { url: payload.url } 
+                : { source: Buffer.isBuffer(payload.buffer) ? payload.buffer : Buffer.from(payload.buffer, 'base64') };
+
+            if (mediaType === 'image') {
+                await ctx.replyWithPhoto(source, replyOptions);
+            } else if (mediaType === 'video') {
+                await ctx.replyWithVideo(source, replyOptions);
+            } else if (mediaType === 'audio') {
+                await ctx.replyWithAudio(source, replyOptions);
+            } else {
+                await ctx.replyWithDocument(source, replyOptions);
+            }
+
+            log.success('TG_ACTION', `send_media (${mediaType}) sent.`);
+        } catch (error) {
+            log.error('TG_ACTION', 'send_media error:', error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/telegram/config.json">
+{
+    "platform": "telegram",
+    "coreUrl": "http://localhost:3000/api/chat",
+    "botName": "Jonquil",
+    "readOnly": false
+}
+</file>
+
+<file path="gateways/telegram/package.json">
+{
+    "name": "@jonquil-ai/tg-gateway",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+        "dev": "node src/index.js"
+    },
+    "dependencies": {
+        "@jonquil-ai/logger": "^1.0.0",
+        "@jonquil-ai/shared": "^1.0.0",
+        "axios": "^1.18.1",
+        "telegraf": "^4.16.3"
+    }
+}
+</file>
+
+<file path="gateways/web/src/index.js">
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
+
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const logger = require('@jonquil-ai/logger');
+const { CoreClient, UniversalMessage, SystemEvents } = require('@jonquil-ai/shared');
+const config = require('../config.json');
+
+const app = express();
+const PORT = process.env.WEB_GATEWAY_PORT || config.port || 4000;
+const core = new CoreClient(process.env.CORE_URL || config.coreUrl);
+
+app.use(cors());
+app.use(express.json());
+
+// rate limiter
+const limiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        success: false,
+        error: "Too many requests. Please wait a minute before sending another message."
+    }
+});
+
+app.use('/api/send', limiter);
+
+app.post('/api/send', async (req, res) => {
+    const { text, sessionId, systemEvent } = req.body;
+
+    // ensure either text or a strict system event is provided
+    if ((!text || !text.trim()) && !systemEvent) {
+        return res.status(400).json({ success: false, error: "missing required fields." });
+    }
+
+    const messageId = 'WEB_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    // intent fallback for text input
+    let finalSystemEvent = systemEvent || null;
+    if (text) {
+        const cleanText = text.trim().toUpperCase();
+        if (cleanText === 'ACCEPT' || cleanText === 'AGREE') finalSystemEvent = SystemEvents.TOS_APPROVE;
+    }
+
+    const universalMsg = new UniversalMessage({
+        platform: config.platform,
+        messageId: messageId,
+        chatId: sessionId,
+        senderId: sessionId,
+        senderName: "Web Guest",
+        isGroup: false,
+        text: (text || "").trim(),
+        systemEvent: finalSystemEvent
+    });
+
+    const log = logger.with(universalMsg);
+    if (finalSystemEvent) log.info('WEB_GATEWAY', `system event triggered: ${finalSystemEvent}`);
+    else log.info('WEB_GATEWAY', `message received: "${text.substring(0, 30)}..."`);
+
+    try {
+        const response = await core.sendMessage(universalMsg);
+
+        if (!response) {
+            log.error('WEB_GATEWAY', 'Core returned empty response');
+            return res.status(503).json({ success: false, error: "Jonquil is currently unavailable." });
+        }
+
+        log.success('WEB_GATEWAY', 'Core response successfully returned to web client.');
+        return res.json({ success: true, reply: response });
+    } catch (error) {
+        log.error('WEB_GATEWAY', 'Error sending message to Core:', error.message);
+        return res.status(500).json({ success: false, error: "Failed to process request." });
+    }
+});
+
+app.listen(PORT, () => {
+    logger.success('WEB_GATEWAY', `Web Gateway is running on port ${PORT}`);
+});
+</file>
+
+<file path="gateways/web/config.json">
+{
+    "platform": "web_demo",
+    "coreUrl": "http://localhost:3000/api/chat",
+    "port": 4000
+  }
+</file>
+
+<file path="gateways/web/package.json">
+{
+    "name": "@jonquil-ai/web-gateway",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+        "dev": "node src/index.js"
+    },
+    "dependencies": {
+        "@jonquil-ai/logger": "^1.0.0",
+        "@jonquil-ai/shared": "^1.0.0",
+        "cors": "^2.8.5",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "express-rate-limit": "^7.5.0"
+    }
+}
+</file>
+
+<file path="gateways/whatsapp/src/actions/sendMedia.js">
+module.exports = {
+    name: 'send_media',
+    execute: async (payload, { sock, universalMsg, rawMsg, log }) => {
+        try {
+            log.info('ACTION', `Sending media (${payload.mediaType || 'image'})...`);
+            
+            const mediaType = payload.mediaType || 'image';
+            const caption = payload.caption || "";
+            let mediaContent = {};
+
+            if (payload.buffer) {
+                const buffer = Buffer.isBuffer(payload.buffer) ? payload.buffer : Buffer.from(payload.buffer, 'base64');
+                mediaContent[mediaType] = buffer;
+            } else if (payload.url) {
+                mediaContent[mediaType] = { url: payload.url };
+            } else {
+                log.error('ACTION', 'No buffer or url provided for send_media!');
+                return;
+            }
+
+            if (caption) mediaContent.caption = caption;
+
+            await sock.sendMessage(universalMsg.chatId, mediaContent, { quoted: rawMsg });
+            log.success('ACTION', `Media (${mediaType}) sent successfully.`);
+        } catch (error) {
+            log.error('ACTION', 'send_media error:', error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/whatsapp/src/actions/tts.js">
+const axios = require('axios');
+
+module.exports = {
+    name: 'tts',
+
+    execute: async (payload, { sock, universalMsg, rawMsg, log }) => {
+        try {
+            log.info('ACTION', `Downloading audio file (Google TTS)...`);
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(payload.text)}&tl=${payload.lang}&client=tw-ob`;
+            
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            const buffer = Buffer.from(response.data);
+
+            await sock.sendMessage(
+                universalMsg.chatId, 
+                {
+                    audio: buffer,
+                    mimetype: 'audio/ogg; codecs=opus',
+                    ptt: true
+                }, 
+                { quoted: rawMsg }
+            );
+
+            log.success('ACTION', `Voice message sent.`);
+        } catch (error) {
+            log.error('ACTION', `Voice message failed:`, error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/whatsapp/src/cache.js">
+const logger = require('@jonquil-ai/logger');
+
+const MAX_CACHE_SIZE = 50;
+const screenCache = new Map();
+
+function saveToScreenCache(rawMsg) {
+    if (!rawMsg || !rawMsg.key || !rawMsg.key.id) return;
+    
+    screenCache.set(rawMsg.key.id, rawMsg);
+    
+
+    if (screenCache.size > MAX_CACHE_SIZE) {
+        const firstKey = screenCache.keys().next().value;
+        screenCache.delete(firstKey);
+    }
+}
+
+function getFromScreenCache(messageId) {
+    return screenCache.get(messageId) || null;
+}
+
+module.exports = {
+    saveToScreenCache,
+    getFromScreenCache
+};
+</file>
+
+<file path="gateways/whatsapp/package.json">
+{
+    "name": "@jonquil-ai/wa-gateway",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "scripts": {
+        "dev": "node src/index.js"
+    },
+    "dependencies": {
+        "@jonquil-ai/logger": "^1.0.0",
+        "@jonquil-ai/shared": "^1.0.0",
+        "@whiskeysockets/baileys": "^7.0.0-rc13",
+        "axios": "^1.18.1",
+        "pino": "^10.3.1",
+        "qrcode-terminal": "^0.12.0",
+        "sharp": "^0.35.3"
+    }
+}
+</file>
+
+<file path="core/src/ai/contextBuilder.js">
+const fs = require('fs');
+const path = require('path');
+
+const soulPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'SOUL.md'), 'utf-8');
+const rulesPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'RULES.md'), 'utf-8');
+const ghostPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'GHOST.md'), 'utf-8');
+
+class ContextBuilder {
+
+    static buildSystemInstruction(platform, timestamp, personaSettings) {
+        const dateObj = new Date(timestamp);
+        const timeStr = dateObj.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' });
+        
+        let finalInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n`;
+
+       const isGhostModeEnabled = true; // todo
+       if (isGhostModeEnabled) {
+           finalInstruction += `${ghostPrompt}\n\n`;
+       }
+
+       // inject db persona overrides if present
+       if (personaSettings) {
+           finalInstruction += `[USER SPECIFIC PERSONA SETTINGS]:\n${personaSettings}\n\n`;
+       }
+
+        finalInstruction += `[Current Platform]: ${platform}\n[Current Time]: ${timeStr}`;
+        
+        return finalInstruction;
+    }
+
+    static buildUserPrompt(universalMessage) {
+        const chatType = universalMessage.isGroup ? "Group Chat" : "Direct Message (DM)";
+        
+        let quoteContext = "";
+        if (universalMessage.quotedMessage) {
+            let qMediaTag = universalMessage.quotedMessage.hasMedia ? ` [Attached Media: ${universalMessage.quotedMessage.mediaType}]` : "";
+            quoteContext = `\n(Quoted MsgID: ${universalMessage.quotedMessage.messageId} | ${universalMessage.quotedMessage.senderName}): "${universalMessage.quotedMessage.text}"${qMediaTag}`;
+        }
+
+        let mediaTag = "";
+        if (universalMessage.hasMedia) {
+            mediaTag = `\n[Media]: User sent a/an [${universalMessage.mediaType.toUpperCase()}].`;
+        }
+
+        const roleTag = universalMessage.role ? ` [Role: ${universalMessage.role}]` : "";
+        
+        return `[MsgID: ${universalMessage.messageId}] [User: ${universalMessage.senderName}]${roleTag} [Environment: ${chatType}]${quoteContext}\n[Message]: ${universalMessage.text}${mediaTag}`;    }
+
+    static extractUserMedia(universalMessage) {
+        if (universalMessage.hasMedia) {
+            return { data: universalMessage.mediaData, mimeType: universalMessage.mediaMime };
+        }
+        if (universalMessage.quotedMessage && universalMessage.quotedMessage.hasMedia) {
+            return { data: universalMessage.quotedMessage.mediaData, mimeType: universalMessage.quotedMessage.mediaMime };
+        }
+        return null;
+    }
+}
+
+module.exports = ContextBuilder;
+</file>
+
+<file path="core/src/tools/imagine/providers/hf.js">
+const axios = require('axios');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    name: 'hf',
+    generate: async (prompt) => {
+        const hfKey = process.env.IMAGINE_HF_KEY;
+        if (!hfKey) {
+            return { success: false, error: "IMAGINE_HF_KEY missing in .env!" };
+        }
+
+        logger.info('TOOL', `HuggingFace generating image: "${prompt.substring(0, 30)}..."`);
+        const model = process.env.IMAGINE_HF_MODEL || 'black-forest-labs/FLUX.1-dev';
+
+        try {
+            const response = await axios.post(
+                `https://api-inference.huggingface.co/models/${model}`,
+                { inputs: prompt },
+                {
+                    headers: { Authorization: `Bearer ${hfKey}` },
+                    responseType: 'arraybuffer'
+                }
+            );
+
+            const buffer = Buffer.from(response.data);
+            return { success: true, buffer: buffer, provider: 'huggingface' };
+        } catch (error) {
+            logger.error('TOOL', `HuggingFace error: ${error.message}`);
+            return { success: false, error: "HuggingFace image generation failed." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/imagine/index.js">
+const logger = require('@jonquil-ai/logger');
+const pollinations = require('./providers/pollinations');
+const hf = require('./providers/hf');
+
+module.exports = {
+    category: 'action',
+    platforms: ['whatsapp', 'telegram'],
+    schema: {
+        name: "generate_image",
+        description: "Generates an image from a text description (prompt) and sends it to the chat. Use when user asks to draw, generate, or visualize something.",
+        parameters: {
+            type: "object",
+            properties: {
+                prompt: { type: "string", description: "Detailed English description of the image to generate" },
+                display_message: { type: "string", description: 'A natural confirmation message to be shown to the user (such as "I am starting to draw").' }
+            },
+            required: ["prompt"]
+        }
+    },
+    execute: async (args, messageContext) => {
+        logger.info('ACTION', `generate_image running... Prompt: "${args.prompt}"`);
+
+        const providerName = process.env.IMAGINE_PROVIDER || 'pollinations';
+        let result;
+
+        if (providerName === 'hf') {
+            result = await hf.generate(args.prompt);
+        } else {
+            result = await pollinations.generate(args.prompt);
+        }
+
+        if (!result.success) {
+            return { success: false, error: result.error };
+        }
+
+        return {
+            success: true,
+            gatewayAction: {
+                type: 'send_media',
+                payload: {
+                    mediaType: 'image',
+                    url: result.url || null,
+                    buffer: result.buffer || null,
+                    caption: `🎨 "${args.prompt}"`
+                }
+            }
+        };
+    }
+};
+</file>
+
+<file path="core/src/tools/calculator.js">
+const logger = require('@jonquil-ai/logger');
+
+/**
+ * Advanced and safe mathematical evaluator with full support for:
+ * - Basic arithmetic: +, -, *, /, %, ^
+ * - Powers & Roots: sqrt, cbrt, pow, ^
+ * - Trigonometry: sin, cos, tan, asin, acos, atan
+ * - Logarithms & Exponentials: log, log10, log2, ln, exp
+ * - Constants & Helpers: pi, e, abs, floor, ceil, round, min, max
+ */
+function safeEval(expr) {
+    if (!expr || typeof expr !== 'string') return null;
+
+    let clean = expr
+        .replace(/π|PI/gi, 'Math.PI')
+        .replace(/\bE\b/g, 'Math.E')
+        .replace(/\bsqrt\b/gi, 'Math.sqrt')
+        .replace(/\bcbrt\b/gi, 'Math.cbrt')
+        .replace(/\bsin\b/gi, 'Math.sin')
+        .replace(/\bcos\b/gi, 'Math.cos')
+        .replace(/\btan\b/gi, 'Math.tan')
+        .replace(/\blog10\b/gi, 'Math.log10')
+        .replace(/\blog2\b/gi, 'Math.log2')
+        .replace(/\bln\b/gi, 'Math.log')
+        .replace(/\blog\b/gi, 'Math.log')
+        .replace(/\babs\b/gi, 'Math.abs')
+        .replace(/\bpow\b/gi, 'Math.pow')
+        .replace(/\bround\b/gi, 'Math.round')
+        .replace(/\bfloor\b/gi, 'Math.floor')
+        .replace(/\bceil\b/gi, 'Math.ceil')
+        .replace(/\^/g, '**')
+        .replace(/Math\.Math\./g, 'Math.');
+
+    // Security check: disallow dangerous JS globals/keywords
+    const forbiddenKeywords = /(process|global|require|import|eval|Function|this|window|document|constructor|prototype|var|let|const|return|if|else|for|while)/i;
+    if (forbiddenKeywords.test(clean)) {
+        return null;
+    }
+
+    try {
+        const evaluator = new Function('Math', `return (${clean});`);
+        const result = evaluator(Math);
+
+        if (typeof result !== 'number' || isNaN(result) || !isFinite(result)) {
+            return null;
+        }
+        return result;
+    } catch (e) {
+        return null;
+    }
+}
+
+module.exports = {
+    category: 'tool',
+    platforms: ['all'],
+    schema: {
+        name: "calculate_expression",
+        description: "Evaluates simple to highly advanced mathematical expressions with 100% precision. Supports arithmetic, trigonometry, roots, logarithms, exponents, and financial equations.",
+        parameters: {
+            type: "object",
+            properties: {
+                expression: {
+                    type: "string",
+                    description: "The mathematical expression to evaluate (e.g. 'sqrt(5)', 'sin(45) * cos(45)', '1000 * (1 + 0.05)^10')."
+                },
+                precision: {
+                    type: "number",
+                    description: "Optional number of decimal places for formatting (0 to 30). Use 2 for financial/currency rounding or up to 15 for scientific precision."
+                }
+            },
+            required: ["expression"]
+        }
+    },
+    execute: async (args) => {
+        logger.info('TOOL', `calculate_expression running for: "${args.expression}" (precision: ${args.precision !== undefined ? args.precision : 'default 10'})`);
+        
+        try {
+            const result = safeEval(args.expression);
+            
+            if (result === null) {
+                return { success: false, error: "Invalid or unsupported mathematical expression." };
+            }
+
+            const digits = typeof args.precision === 'number' ? Math.min(Math.max(args.precision, 0), 15) : 10;
+
+            return {
+                success: true,
+                expression: args.expression,
+                result: result,
+                formattedResult: result.toLocaleString('en-US', { maximumFractionDigits: digits })
+            };
+        } catch (error) {
+            logger.error('TOOL', `Calculator error: ${error.message}`);
+            return { success: false, error: "Advanced calculation failed." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/musicSearch.js">
+const axios = require('axios');
+const logger = require('@jonquil-ai/logger');
+
+module.exports = {
+    category: 'action',
+    platforms: ['telegram', 'whatsapp'],
+    schema: {
+        name: "music_search",
+        description: "Provides direct access to the iTunes/Apple Music API. Use this to search for music, lookup discographies by ID, or play a 30-second audio track in the chat.",
+        parameters: {
+            type: "object",
+            properties: {
+                action: {
+                    type: "string",
+                    enum: ["search", "lookup", "play"],
+                    description: "The endpoint to use: 'search' (by keyword), 'lookup' (fetch sub-items by ID), or 'play' (dispatch 30s audio to the user)."
+                },
+                term: {
+                    type: "string",
+                    description: "Search keyword. Required if action is 'search' or 'play' (if no ID is provided)."
+                },
+                id: {
+                    type: "number",
+                    description: "iTunes ID (trackId, collectionId, or artistId). Required if action is 'lookup' or 'play' (if bypassing term search)."
+                },
+                entity: {
+                    type: "string",
+                    enum: ["song", "album", "musicArtist"],
+                    description: "The type of entity to query. Default is 'song'."
+                },
+                country: {
+                    type: "string",
+                    description: "ISO country code for the storefront (e.g., 'US', 'TR', 'GB'). Choose based on the user's language/query context. Default is 'US'."
+                },
+                limit: {
+                    type: "number",
+                    description: "Number of raw data results to return.",
+                    minimum: 1,
+                    maximum: 20
+                }
+            },
+            required: ["action"]
+        }
+    },
+    execute: async (args) => {
+        const { action, term, id, entity = 'song', country = 'US', limit = 10 } = args;
+
+        logger.info('TOOL', `iTunes API -> Action: ${action} | Country: ${country} | Entity: ${entity}`);
+
+        const cleanRawData = (item) => ({
+            id: item.trackId || item.collectionId || item.artistId,
+            type: item.wrapperType || item.kind,
+            name: item.trackName || item.collectionName || item.artistName,
+            artist: item.artistName,
+            album: item.collectionName || null,
+            genre: item.primaryGenreName,
+            year: item.releaseDate ? item.releaseDate.substring(0, 4) : null,
+            trackNumber: item.trackNumber || null,
+            hasPreview: !!item.previewUrl,
+            previewUrl: item.previewUrl || null,
+            coverUrl: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '600x600bb') : null
+        });
+
+        try {
+            // raw search
+            if (action === 'search') {
+                if (!term) return { success: false, error: "The 'term' parameter is required for the search function." };
+
+                const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=${country}&media=music&entity=${entity}&limit=${limit}`;
+                const response = await axios.get(url);
+
+                return {
+                    success: true,
+                    resultCount: response.data.resultCount,
+                    data: response.data.results.map(cleanRawData)
+                };
+            }
+
+            // raw lookup
+            if (action === 'lookup') {
+                if (!id) return { success: false, error: "Lookup için 'id' zorunludur." };
+
+                const url = `https://itunes.apple.com/lookup?id=${id}&entity=${entity}&country=${country}&limit=${limit}`;
+                const response = await axios.get(url);
+
+                return {
+                    success: true,
+                    resultCount: response.data.resultCount,
+                    data: response.data.results.map(cleanRawData)
+                };
+            }
+
+            // play
+            if (action === 'play') {
+                let track = null;
+
+                // by id
+                if (id) {
+                    const url = `https://itunes.apple.com/lookup?id=${id}&country=${country}`;
+                    const res = await axios.get(url);
+                    track = res.data.results[0];
+                }
+                // by song name
+                else if (term) {
+                    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&country=${country}&media=music&entity=song&limit=1`;
+                    const res = await axios.get(url);
+                    track = res.data.results[0];
+                }
+
+                if (!track || !track.previewUrl) {
+                    return { success: false, error: "No playable audio file was found for this content." };
+                }
+
+                const cleanedTrack = cleanRawData(track);
+
+                return {
+                    success: true,
+                    info: "The audio file has been successfully sent to the user. Now, comment on/present your thoughts on this song to the user.",
+                    playedData: cleanedTrack,
+                    gatewayAction: {
+                        type: 'send_media',
+                        payload: {
+                            mediaType: 'audio',
+                            url: cleanedTrack.previewUrl,
+                            mimeType: 'audio/mp3',
+                            caption: `🎵 **${cleanedTrack.name}**\n🎤 **${cleanedTrack.artist}**\n💿 ${cleanedTrack.album || 'Single'} (${cleanedTrack.year})`
+                        }
+                    }
+                };
+            }
+
+            return { success: false, error: "Unknown action." };
+
+        } catch (error) {
+            logger.error('TOOL', `iTunes API Error: ${error.message}`);
+            return { success: false, error: "Apple API connection error." };
+        }
+    }
+};
+</file>
+
+<file path="core/src/tools/sticker.js">
+const log = require('@jonquil-ai/logger');
+
+
+module.exports = {
+    category: 'action',
+    platforms: ['whatsapp'],
+    schema: {
+        name: "make_a_sticker",
+        description: "Converts a photo that a user has posted or quoted into a WhatsApp sticker. Use it when the user selects \"make this a sticker\".",
+        parameters: {
+            type: "object",
+            properties: {
+                message_id: { type: "string", description: "The MsgID of the media to be used for the sticker." }
+            },
+            required: []
+        }
+    },
+
+    execute: async (args, messageContext) => {
+        log.info('ACTION', `make_a_sticker running...`);
+
+        let target = args.message_id || messageContext.messageId;
+        if (!args.message_id && messageContext.quotedMessage) {
+            target = messageContext.quotedMessage.messageId;
+        }
+
+        return { success: true, gatewayAction: { type: 'sticker', payload: { targetId: target } } };
+    }
+};
+</file>
+
+<file path="gateways/telegram/src/index.js">
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
+
+const { Telegraf } = require('telegraf');
+const logger = require('@jonquil-ai/logger');
+const { CoreClient, MessageBatcher } = require('@jonquil-ai/shared');
+
+const config = require('../config.json');
+const { parseTelegramMessage } = require('./parser');
+const { executeAction } = require('./actions');
+
+const maxLogLength = parseInt(process.env.MAX_LOG_LENGTH) || 100;
+
+const core = new CoreClient(config.coreUrl);
+
+if (!process.env.TG_BOT_TOKEN) {
+    logger.error('TG_GATEWAY', 'TG_BOT_TOKEN missing!');
+    process.exit(1);
+}
+const bot = new Telegraf(process.env.TG_BOT_TOKEN);
+
+const batcher = new MessageBatcher(3000, async (chatId, batch) => {
+    const universalMessages = batch.map(b => b.universalMsg);
+    const lastCtx = batch[batch.length - 1].rawMsg;
+    const lastUniversalMsg = universalMessages[universalMessages.length - 1];
+
+    const log = logger.with(lastUniversalMsg);
+    log.info('TG_GATEWAY', `${batch.length} messages are being sent to AI...`);
+
+    try {
+        const response = await core.sendMessage(universalMessages);
+        if (!response) return;
+
+        if (response.systemAction) {
+            log.info('TG_GATEWAY', `system action: ${response.systemAction}`);
+            await executeAction('system_ux', { actionType: response.systemAction, data: response.systemPayload }, { ctx: lastCtx, log });
+            return;
+        }
+
+        // text msg
+        if (response.text) {
+            if (config.readOnly) {
+                log.warn('TG_GATEWAY', `[READ-ONLY] Message Sending Blocked: ${response.text.substring(0, 50)}`);
+            } else {
+
+                await lastCtx.sendChatAction('typing');
+                setTimeout(async () => {
+                    // quote last msg
+                    await lastCtx.reply(response.text, { reply_parameters: { message_id: lastCtx.message.message_id } });
+                    log.success('TG_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
+                }, 1500);
+            }
+        }
+
+        // actions
+        if (response.actions && response.actions.length > 0) {
+            for (const action of response.actions) {
+                if (config.readOnly) {
+                    log.warn('TG_GATEWAY', `[READ-ONLY MODE] Action Sending Blocked: ${action.type}`);
+                } else {
+                    log.info('TG_GATEWAY', `Action: ${action.type}`);
+                    await executeAction(action.type, action.payload, { ctx: lastCtx, log });
+                }
+            }
+        }
+    } catch (error) {
+        log.error('TG_GATEWAY', 'Core error:', error.message);
+    }
+});
+
+// msg listener
+bot.on('message', async (ctx) => {
+    // FIX: Added await here for async parseTelegramMessage
+    const universalMsg = await parseTelegramMessage(ctx, config.platform);
+    if (!universalMsg) return;
+
+    const tempLog = logger.with(universalMsg);
+    const logPreview = universalMsg.text ? universalMsg.text.substring(0, maxLogLength) : `[Media: ${universalMsg.mediaType || 'audio'}]`;
+    tempLog.info('TG_GATEWAY', `[Added to queue]: ${logPreview}`);
+
+    batcher.add(universalMsg.chatId, universalMsg, ctx);
+});
+
+// start bot
+bot.launch(() => {
+    logger.success('TG_GATEWAY', 'Connected to Telegram successfully!');
+});
+
+// graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+</file>
+
+<file path="gateways/telegram/src/parser.js">
+const { detectSystemEvent } = require('./intents');
+const { UniversalMessage } = require('@jonquil-ai/shared');
+const axios = require('axios');
+
+async function fetchTelegramMedia(ctx, fileId) {
+    try {
+        const link = await ctx.telegram.getFileLink(fileId);
+        const response = await axios.get(link.href, { responseType: 'arraybuffer' });
+        const buffer = Buffer.from(response.data);
+        return buffer.toString('base64');
+    } catch (e) {
+        return null;
+    }
+}
+
+async function parseTelegramMessage(ctx, platformName) {
+    const msg = ctx.message;
+    if (!msg) return null;
+
+    // metas
+    const messageId = msg.message_id.toString();
+    const chatId = msg.chat.id.toString();
+    const senderId = msg.from.id.toString();
+    const senderName = msg.from.first_name || msg.from.username || "Guest";
+    const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
+
+    // text
+    const text = msg.text || msg.caption || "";
+
+    // media
+    const hasMedia = !!(msg.photo || msg.video || msg.sticker || msg.voice || msg.audio);
+    let mediaType = null;
+    let mediaData = null;
+    let mediaMime = null;
+
+    if (msg.photo) {
+        mediaType = 'image';
+        mediaMime = 'image/jpeg';
+    } else if (msg.video) {
+        mediaType = 'video';
+        mediaMime = 'video/mp4';
+    } else if (msg.sticker) {
+        mediaType = 'sticker';
+        mediaMime = 'image/webp';
+    } else if (msg.voice || msg.audio) {
+        mediaType = 'audio';
+        mediaMime = msg.voice ? 'audio/ogg' : (msg.audio.mime_type || 'audio/mp3');
+        const fileId = msg.voice ? msg.voice.file_id : msg.audio.file_id;
+        mediaData = await fetchTelegramMedia(ctx, fileId);
+    }
+
+    // quoted msg
+    let quotedMessage = null;
+    if (msg.reply_to_message) {
+        const qMsg = msg.reply_to_message;
+        const qHasMedia = !!(qMsg.photo || qMsg.video || qMsg.sticker || qMsg.voice || qMsg.audio);
+        let qMediaType = null;
+        if (qMsg.photo) qMediaType = 'image';
+        else if (qMsg.video) qMediaType = 'video';
+        else if (qMsg.sticker) qMediaType = 'sticker';
+        else if (qMsg.voice || qMsg.audio) qMediaType = 'audio';
+
+        quotedMessage = {
+            messageId: qMsg.message_id.toString(),
+            senderId: qMsg.from.id.toString(),
+            senderName: qMsg.from.id === ctx.botInfo.id ? "Itself" : (qMsg.from.first_name || "Guest"),
+            text: qMsg.text || qMsg.caption || "",
+            mediaType: qMediaType
+        };
+    }
+
+    const timestamp = new Date(msg.date * 1000).toISOString();
+
+    // mentions
+    let mentions = [];
+    if (msg.entities) {
+        msg.entities.forEach(entity => {
+            if (entity.type === 'mention') {
+                const mentionText = text.substring(entity.offset, entity.offset + entity.length);
+                mentions.push(mentionText);
+            }
+        });
+    }
+
+    const systemEvent = detectSystemEvent(text);
+
+    return new UniversalMessage({
+        platform: platformName, messageId, chatId, senderId, senderName, isGroup, text, 
+        hasMedia, mediaType, mediaData, mediaMime, quotedMessage, mentions, timestamp,
+        systemEvent
+    });
+}
+
+module.exports = { parseTelegramMessage };
+</file>
+
+<file path="gateways/whatsapp/src/actions/sticker.js">
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+const sharp = require('sharp');
+const { getFromScreenCache } = require('../cache');
+
+module.exports = {
+    name: 'sticker',
+
+    execute: async (payload, { sock, universalMsg, rawMsg, log }) => {
+        try {
+            log.info('ACTION', 'Sticker production is starting....');
+            
+            let targetMsg = rawMsg; 
+
+            if (payload.targetId) {
+                targetMsg = getFromScreenCache(payload.targetId);
+                
+                if (!targetMsg) {
+                    const contextInfo = rawMsg.message?.extendedTextMessage?.contextInfo || rawMsg.message?.imageMessage?.contextInfo;
+                    if (contextInfo?.quotedMessage && contextInfo.stanzaId === payload.targetId) {
+                        targetMsg = { message: contextInfo.quotedMessage };
+                    } else {
+                        log.warn('ACTION', 'The targeted message (ID) was not found in the cache!');
+                        return;
+                    }
+                }
+            }
+
+            const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, { logger: log, reuploadRequest: sock.updateMediaMessage });
+
+            if (!buffer) {
+                log.warn('ACTION', 'No media found for the sticker..');
+                return;
+            }
+
+            const stickerBuffer = await sharp(buffer)
+                .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+                .webp()
+                .toBuffer();
+
+            await sock.sendMessage(universalMsg.chatId, { sticker: stickerBuffer });
+            log.success('ACTION', 'The sticker was successfully created and sent!');
+        } catch (error) {
+            log.error('ACTION', 'Sticker error:', error.message);
+        }
+    }
+};
+</file>
+
+<file path="gateways/whatsapp/config.json">
+{
+  "platform": "whatsapp",
+  "coreUrl": "http://localhost:3000/api/chat",
+  "botName": "Jonquil AI",
+  "readOnly": false
+}
+</file>
+
+<file path="packages/logger/index.js">
+// packages/logger/index.js
+const util = require('util');
+
+const colors = {
+    reset: "\x1b[0m",
+    bright: "\x1b[1m",
+    dim: "\x1b[2m",
+    red: "\x1b[31m",
+    green: "\x1b[32m",
+    yellow: "\x1b[33m",
+    blue: "\x1b[34m",
+    magenta: "\x1b[35m",
+    cyan: "\x1b[36m",
+    white: "\x1b[37m"
+};
+
+const timestamp = () => `\x1b[90m[${new Date().toLocaleTimeString()}]\x1b[0m`;
+const tag = (label, color) => `${color}[${label.toUpperCase()}]${colors.reset}`;
+
+const printObjects = (args) => {
+    args.forEach(arg => {
+        if (typeof arg === 'object' && arg !== null) {
+            console.log(util.inspect(arg, { colors: true, depth: null, compact: false }));
+        }
+    });
+};
+
+const logger = {
+
+    _print: (category, color, message, args, context = null) => {
+        const textArgs = args.filter(a => typeof a !== 'object').join(' ');
+        const finalMessage = textArgs ? `${message} ${textArgs}` : message;
+
+        let prefix = "";
+
+        if (context) {
+            
+            const name = context.senderName || 'unknown';
+            const platform = context.platform || 'test-cli';
+            const id = context.messageId ? context.messageId.substring(0, 6) : '---';
+            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
+        }
+
+        console.log(`${timestamp()} ${tag(category, color)} ${prefix}${finalMessage}`);
+        
+        const objArgs = args.filter(a => typeof a === 'object');
+        printObjects(objArgs);
+    },
+
+    info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args),
+    debug: (cat, msg, ...args) => logger._print(cat, colors.magenta, msg, args),
+    success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args),
+    warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args),
+    error: (cat, msg, ...args) => {
+        console.error(`${timestamp()} ${tag(cat, colors.red)} ${msg}`);
+        args.forEach(arg => console.error(arg));
+    },
+
+    dump: (title, data, contextObj = null) => {
+
+        if (process.env.AI_DEBUG_MODE !== 'true') return; 
+
+        let prefix = "";
+        if (contextObj) {
+            const name = contextObj.senderName || 'unknown';
+            const platform = contextObj.platform || 'cli';
+            const id = contextObj.messageId ? contextObj.messageId.substring(0, 6) : '---';
+            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
+        }
+
+        console.log(`\n${colors.magenta}┌── DEBUG DUMP: ${title.toUpperCase()} ─────────────────────────────${colors.reset}`);
+        console.log(`${prefix}`);
+        console.log(util.inspect(data, { colors: true, depth: null, compact: false }));
+        console.log(`${colors.magenta}└─────────────────────────────────────────────────────────────${colors.reset}\n`);
+    },
+
+    with: (contextObj) => {
+        return {
+            info: (cat, msg, ...args) => logger._print(cat, colors.blue, msg, args, contextObj),
+            debug: (cat, msg, ...args) => logger._print(cat, colors.magenta, msg, args, contextObj),
+            success: (cat, msg, ...args) => logger._print(cat, colors.green, msg, args, contextObj),
+            warn: (cat, msg, ...args) => logger._print(cat, colors.yellow, msg, args, contextObj),
+            error: (cat, msg, ...args) => logger._print(cat, colors.red, msg, args, contextObj),
+            dump: (title, data) => logger.dump(title, data, contextObj) 
+        };
+    }
+};
+
+module.exports = logger;
+</file>
+
+<file path="core/src/ai/providers/gemini.js">
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+class GeminiProvider {
+    constructor() {
+        if (!process.env.GEMINI_KEY) throw new Error("GEMINI_KEY is missing!");
+        this.genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+
+        this.modelName = process.env.GEMINI_MODEL || "gemini-flash-latest";
+        this.enableVision = process.env.ENABLE_VISION === 'true';
+    }
+
+    // Recursive schema parser to support nested objects, arrays, and enums
+    _parseSchema(schemaObj) {
+        if (!schemaObj) return undefined;
+        
+        const parsed = {
+            type: schemaObj.type.toUpperCase()
+        };
+        
+        if (schemaObj.description) parsed.description = schemaObj.description;
+        if (schemaObj.enum) parsed.enum = schemaObj.enum;
+        
+        if (schemaObj.properties) {
+            parsed.properties = {};
+            for (const [key, val] of Object.entries(schemaObj.properties)) {
+                parsed.properties[key] = this._parseSchema(val);
+            }
+        }
+        
+        if (schemaObj.items) {
+            parsed.items = this._parseSchema(schemaObj.items);
+        }
+        
+        if (schemaObj.required) {
+            parsed.required = schemaObj.required;
+        }
+
+        return parsed;
+    }
+
+    _formatTools(universalTools) {
+        if (!universalTools || universalTools.length === 0) return undefined;
+        
+        const formattedTools = universalTools.map(tool => {
+            return {
+                name: tool.name,
+                description: tool.description,
+                parameters: this._parseSchema(tool.parameters)
+            };
+        });
+
+        return [{ functionDeclarations: formattedTools }];
+    }
+
+    _formatHistory(universalHistory) {
+        return universalHistory.filter(msg => msg.role !== 'system').map(msg => {
+            if (msg.role === 'user') {
+                const parts = [{ text: msg.content }];
+                
+                if (this.enableVision && msg.media && msg.media.data) {
+                    parts.push({
+                        inlineData: {
+                            data: msg.media.data,
+                            mimeType: msg.media.mimeType
+                        }
+                    });
+                }
+                return { role: 'user', parts };
+            }
+            if (msg.role === 'assistant') {
+                if (msg.toolCalls) {
+                    const parts = [];
+
+                    if (msg.content) {
+                        parts.push({ text: msg.content });
+                    }
+                    
+                    parts.push(...msg.toolCalls.map(tc => {
+                        const part = { functionCall: { name: tc.name, args: tc.args } };
+                        const sig = tc.thoughtSignature || tc.thought_signature;
+                        if (sig) part.thoughtSignature = sig;
+                        return part;
+                    }));
+                    
+                    return { role: 'model', parts: parts };
+                }
+                return { role: 'model', parts: [{ text: msg.content }] };
+            }
+            if (msg.role === 'tool') {
+                return { role: 'user', parts: [{ functionResponse: { name: msg.name, response: msg.content } }] };
+            }
+        });
+    }
+
+    async generate(history, tools) {
+        const systemMsg = history.find(m => m.role === 'system');
+        const systemInstruction = systemMsg ? systemMsg.content : "";
+
+        const model = this.genAI.getGenerativeModel({
+            model: this.modelName,
+            systemInstruction: systemInstruction,
+            tools: this._formatTools(tools),
+        });
+
+        const contents = this._formatHistory(history);
+        
+        const result = await model.generateContent({ contents });
+        const response = result.response;
+
+        const output = { text: response.text() || null, toolCalls: [] };
+        const candidate = response.candidates && response.candidates[0];
+        const parts = candidate?.content?.parts || [];
+
+        if (response.functionCalls()) {
+            output.toolCalls = parts.filter(part => part.functionCall).map(part => {
+                const sig = part.thoughtSignature || part.thought_signature;
+                const tc = { name: part.functionCall.name, args: part.functionCall.args, id: sig || Math.random().toString(36).substring(7) };
+                if (sig) tc.thoughtSignature = sig;
+                return tc;
+            });
+        }
+        return output;
+    }
+}
+
+module.exports = new GeminiProvider();
+</file>
+
+<file path="core/package.json">
+{
+    "name": "@jonquil-ai/core",
+    "version": "1.0.0",
+    "main": "src/server.js",
+    "scripts": {
+        "dev": "node src/server.js"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "@jonquil-ai/logger": "^1.0.0",
+        "@jonquil-ai/shared": "^1.0.0",
+        "@mistralai/mistralai": "^2.5.0",
+        "axios": "^1.18.1",
+        "cors": "^2.8.6",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "google-translate-api-x": "^10.7.3",
+        "gpt-tokenizer": "^3.4.0"
+    }
+}
+</file>
+
+<file path="core/src/ai/memory.js">
+const logger = require('@jonquil-ai/logger');
+const { encode } = require('gpt-tokenizer');
+
+const sessions = new Map();
+
+const MAX_CONTEXT_TOKENS = parseInt(process.env.AI_MAX_CONTEXT_TOKENS) || 8000;
+
+function getSessionHistory(chatId) {
+    if (!sessions.has(chatId)) {
+        sessions.set(chatId, []);
+    }
+    return sessions.get(chatId);
+}
+
+function calculateTokens(turn) {
+
+    const contentStr = typeof turn.content === 'object' ? JSON.stringify(turn.content) : (turn.content || "");
+    
+
+    let toolStr = "";
+    if (turn.toolCalls) {
+        toolStr = turn.toolCalls.map(tc => `${tc.name} ${JSON.stringify(tc.args)}`).join(" ");
+    }
+
+    const fullText = `${turn.role} ${contentStr} ${toolStr}`;
+    return encode(fullText).length;
+}
+
+function getTotalTokens(history) {
+    return history.reduce((acc, turn) => acc + calculateTokens(turn), 0);
+}
+
+function saveToSession(chatId, newTurns) {
+    const history = getSessionHistory(chatId);
+    
+    history.push(...newTurns);
+
+    let currentTokens = getTotalTokens(history);
+
+    if (currentTokens > MAX_CONTEXT_TOKENS) {
+        logger.info('MEMORY', `[${chatId}] Token limit exceeded. (${currentTokens} > ${MAX_CONTEXT_TOKENS}). Clearing...`);
+        
+        let sliceIndex = 0;
+
+        while (currentTokens > MAX_CONTEXT_TOKENS && sliceIndex < history.length) {
+            currentTokens -= calculateTokens(history[sliceIndex]);
+            sliceIndex++;
+        }
+
+        while (sliceIndex < history.length && history[sliceIndex].role !== 'user') {
+            sliceIndex++;
+        }
+
+        if (sliceIndex > 0) {
+            history.splice(0, sliceIndex);
+            logger.debug('MEMORY', `[${chatId}] Memory cleared. Current Tokens: ${getTotalTokens(history)}`);
+        }
+    }
+}
+
+function clearSession(chatId) {
+    sessions.delete(chatId);
+    logger.info('MEMORY', `Clear message history for '${chatId}'`);
+}
+
+module.exports = {
+    getSessionHistory,
+    saveToSession,
+    clearSession
+};
+</file>
+
+<file path="gateways/whatsapp/src/parser.js">
+const { detectSystemEvent } = require('./intents');
+const { UniversalMessage } = require('@jonquil-ai/shared');
+const { downloadMediaMessage } = require('@whiskeysockets/baileys');
+
+function extractText(messageObj) {
+    if (!messageObj) return "";
+    return messageObj.conversation || 
+           messageObj.extendedTextMessage?.text || 
+           messageObj.imageMessage?.caption || 
+           messageObj.videoMessage?.caption || "";
+}
+
+async function fetchMedia(msgObject, msgType, logger) {
+    try {
+        const buffer = await downloadMediaMessage(msgObject, 'buffer', {}, { logger });
+        return {
+            mediaData: buffer.toString('base64'),
+            mediaMime: msgObject.message[msgType].mimetype,
+            mediaType: msgType.replace('Message', '')
+        };
+    } catch (e) {
+        logger.error('PARSER', 'Media could not be downloaded:', e.message);
+        return null;
+    }
+}
+
+async function parseBaileysMessage(rawMsg, platformName, logger) {
+    if (!rawMsg.message) return null;
+
+    const messageId = rawMsg.key.id;
+    const chatId = rawMsg.key.remoteJid;
+    const senderId = rawMsg.key.participant || rawMsg.key.remoteJid;
+    const senderName = rawMsg.pushName || "Guest";
+    const isGroup = chatId.endsWith('@g.us');
+    
+    const text = extractText(rawMsg.message);
+    const messageType = Object.keys(rawMsg.message)[0];
+    const hasMedia = ['imageMessage', 'videoMessage', 'stickerMessage', 'audioMessage'].includes(messageType);
+
+
+    let mediaObj = hasMedia ? await fetchMedia(rawMsg, messageType, logger) : null;
+
+
+    let quotedMessage = null;
+    let mentions = [];
+    const contextInfo = rawMsg.message.extendedTextMessage?.contextInfo || 
+                        rawMsg.message.imageMessage?.contextInfo || 
+                        rawMsg.message.videoMessage?.contextInfo;
+
+    if (contextInfo) {
+        if (contextInfo.mentionedJid) mentions = contextInfo.mentionedJid;
+
+        if (contextInfo.quotedMessage) {
+            const qMsgType = Object.keys(contextInfo.quotedMessage)[0];
+            const isQuotedMedia = ['imageMessage', 'videoMessage', 'stickerMessage', 'audioMessage'].includes(qMsgType);
+            
+            const qMediaObj = isQuotedMedia ? await fetchMedia({ message: contextInfo.quotedMessage }, qMsgType, logger) : null;
+
+            quotedMessage = {
+                messageId: contextInfo.stanzaId,
+                senderId: contextInfo.participant,
+                remoteJid: contextInfo.remoteJid,
+                senderName: contextInfo.participant === senderId ? "Itself" : contextInfo.participant.split('@')[0],
+                text: extractText(contextInfo.quotedMessage),
+                mediaType: qMediaObj?.mediaType || null,
+                mediaData: qMediaObj?.mediaData || null,
+                mediaMime: qMediaObj?.mediaMime || null
+            };
+        }
+    }
+
+    if (!text.trim() && !hasMedia && !quotedMessage) return null;
+
+    const timestamp = new Date(rawMsg.messageTimestamp * 1000).toISOString();
+
+    const systemEvent = detectSystemEvent(text);
+
+    return new UniversalMessage({
+        platform: platformName,
+        messageId, chatId, senderId, senderName, isGroup, text, hasMedia,
+        mediaType: mediaObj?.mediaType, 
+        mediaData: mediaObj?.mediaData, 
+        mediaMime: mediaObj?.mediaMime, 
+        quotedMessage, mentions, timestamp,
+        systemEvent: systemEvent
+    });
+}
+
+module.exports = { parseBaileysMessage };
+</file>
+
+<file path=".env.example">
+# =======================================
+# .env.example
+# =======================================
+# Copy this file as a ".env" 
+# And fill it with your own values.
+# =======================================
+
+
+# === NETWORK SETTINGS === #
+PORT=3000
+
+
+# === AI PROVIDER SETTINGS === #
+ACTIVE_PROVIDER=gemini
+
+# Google AI
+GEMINI_KEY=YOUR_GEMINI_API_KEY
+GEMINI_MODEL=gemini-3.1-flash-lite
+
+# Mistral AI
+MISTRAL_KEY=YOUR_MISTRAL_API_KEY
+MISTRAL_MODEL=mistral-large-latest
+
+
+# === IMAGINE SETTINGS === #
+IMAGINE_PROVIDER=pollinations # Options: pollinations (no api key needed) | hf (HuggingFace API with api key)
+IMAGINE_HF_KEY=YOUR_HF_API_KEY
+IMAGINE_HF_MODEL=stabilityai/stable-diffusion-2-1
+
+
+# === GATEWAY SETTINGS === #
+TG_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+
+
+# === AI CORE SETTINGS === #
+ENABLE_VISION=true # If set to false, no incoming media content will be sent to the AI ​​Provider. It can be disabled if the quota is limited or the model being used does not support the media content.
+AI_MAX_CONTEXT_TOKENS=8000 # The maximum tokens of context (user messages, agent messages, tool calls).
+AI_MAX_LOOPS=3 # The maximum number of loops an agent can create during tool calls and its thought process.
+
+# === DATABASE SETTINGS ===
+DATABASE_URL="file:./system.db"
+
+# === LEGAL & SECURITY ===
+REQUIRE_TOS=true
+TOS_URL=http://example.com/terms
+
+# === DEVELOPER SETTINGS === #
+AI_DEBUG_MODE=true # If set to True, it displays the full context going to/coming from the AI ​​in the console.
+MAX_LOG_LENGTH=5 # Maximum number of characters for messages in the logs
+</file>
+
+<file path="core/src/server.js">
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const express = require('express');
+const cors = require('cors');
+const logger = require('@jonquil-ai/logger');
+const handleMessageWithAI = require('./ai/index');
+const { enqueueTask } = require('./ai/taskLock');
+const { resolveIdentity } = require('./auth/guard');
+const { SystemActions, UniversalResponse } = require('@jonquil-ai/shared');
+
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+const PORT = process.env.PORT || 3000;
+
+app.post('/api/chat', (req, res) => {
+    const incomingData = req.body;
+    let messagesBatch = Array.isArray(incomingData) ? incomingData : [incomingData];
+
+    const validMessages = messagesBatch.filter(m => m && (m.text || m.hasMedia || m.systemEvent));
+    
+    if (validMessages.length === 0) {
+        return res.status(400).json({ error: "invalid message format" });
+    }
+
+    const chatId = validMessages[0].chatId;
+
+    enqueueTask(chatId, async () => {
+        try {
+            const lastMsg = validMessages[validMessages.length - 1];
+            const identity = await resolveIdentity(lastMsg);
+
+            // halt execution if tos is required but not accepted
+            if (identity.isTosBlocked) {
+                if (identity.systemAction !== SystemActions.IGNORE) {
+                    return res.json({ 
+                        success: true, 
+                        reply: new UniversalResponse({ 
+                            text: null, 
+                            systemAction: identity.systemAction, 
+                            systemPayload: identity.systemPayload 
+                        }) 
+                    });
+                }
+                return res.json({ success: true, reply: new UniversalResponse({ text: null }) });
+            }
+            
+            // inject resolved identity into message batch
+            validMessages.forEach(m => {
+                m.uid = identity.uid;
+                m.role = identity.role;
+                m.personaSettings = identity.personaSettings;
+            });
+
+            const replyObj = await handleMessageWithAI(validMessages);
+            res.json({ success: true, reply: replyObj });
+        } catch (error) {
+            logger.error('CORE', 'server error', error);
+            if (!res.headersSent) {
+                res.status(500).json({ success: false, error: "system is currently unavailable." });
+            }
+        }
+    });
+});
+
+app.listen(PORT, () => {
+    logger.success('SYSTEM', `core is running on port "${PORT}"!`);
+});
+</file>
+
+<file path="packages/shared/index.js">
+/**
+ * This structure is the "Data Transfer Object" (DTO) that messages 
+ * from all platforms (WA, Telegram) will use when being transmitted 
+ * to the CORE (Jonquil) service.
+ */
+class UniversalMessage {
+    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, mediaData = null, mediaMime = null, mediaType = null, quotedMessage = null, mentions = [], timestamp = null, systemEvent = null }) {        this.platform = platform;
+        this.messageId = messageId;
+        this.chatId = chatId;
+        this.senderId = senderId;
+        this.senderName = senderName;
+        this.isGroup = isGroup;
+        this.text = text || "";
+        this.hasMedia = hasMedia;
+        this.mediaData = mediaData;
+        this.mediaMime = mediaMime;
+        this.mediaType = mediaType; // 'image', 'video', 'sticker', 'audio'
+        this.quotedMessage = quotedMessage;
+        this.mentions = mentions;
+        this.timestamp = timestamp || new Date().toISOString();
+        this.systemEvent = systemEvent;
+    }
+    isEmpty() { return !this.text && !this.hasMedia && !this.systemEvent; }
+}
+
+class UniversalResponse {
+    constructor({ text = null, actions = [], systemAction = null, systemPayload = null }) {
+        this.text = text;
+        this.actions = actions;
+        this.systemAction = systemAction;
+        this.systemPayload = systemPayload; 
+    }
+}
+
+/**
+ * The common client that all gateways will use to connect to Jonquil.
+ */
+class CoreClient {
+    constructor(coreUrl = 'http://localhost:3000/api/chat') {
+        this.coreUrl = coreUrl;
+    }
+
+    async sendMessage(universalMessage) {
+        try {
+            const response = await fetch(this.coreUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(universalMessage)
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            const data = await response.json();
+            return new UniversalResponse(data.reply);
+        } catch (error) {
+            console.error("[CORE_CLIENT] Jonquil is unreachable:", error.message);
+            return null;
+        }
+    }
+}
+
+
+/**
+ * A "Message Debouncer" that all Gateways can use in common.
+ * It holds incoming messages for a specific period and sends 
+ * them to the callback as an array.
+ */
+class MessageBatcher {
+    constructor(delayMs = 3000, onBatchReady) {
+        this.delayMs = delayMs;
+        this.onBatchReady = onBatchReady;
+        this.queues = new Map();
+        this.timers = new Map();
+    }
+
+    add(chatId, universalMsg, rawMsg) {
+        if (!this.queues.has(chatId)) {
+            this.queues.set(chatId, []);
+        }
+        
+        this.queues.get(chatId).push({ universalMsg, rawMsg });
+
+        if (this.timers.has(chatId)) {
+            clearTimeout(this.timers.get(chatId));
+        }
+
+        this.timers.set(chatId, setTimeout(() => {
+            const batch = this.queues.get(chatId);
+            this.queues.delete(chatId);
+            this.timers.delete(chatId);
+            
+            this.onBatchReady(chatId, batch);
+        }, this.delayMs));
+    }
+}
+
+
+const SystemEvents = {
+    TOS_APPROVE: 'TOS_APPROVE'
+};
+
+const SystemActions = {
+    SHOW_TOS_PROMPT_DM: 'SHOW_TOS_PROMPT_DM',
+    SHOW_TOS_PROMPT_GROUP: 'SHOW_TOS_PROMPT_GROUP',
+    TOS_APPROVED_SUCCESS: 'TOS_APPROVED_SUCCESS',
+    IGNORE: 'IGNORE'
+};
+
+module.exports = {
+    UniversalMessage,
+    UniversalResponse,
+    CoreClient,
+    MessageBatcher,
+    SystemEvents,
+    SystemActions
+};
+</file>
+
+<file path="gateways/whatsapp/src/index.js">
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const logger = require('@jonquil-ai/logger');
+const { CoreClient, MessageBatcher } = require('@jonquil-ai/shared');
+
+const config = require('../config.json');
+const { parseBaileysMessage } = require('./parser');
+const { executeAction } = require('./actions');
+const { saveToScreenCache } = require('./cache');
+
+const maxLogLength = 999;
+
+const core = new CoreClient(config.coreUrl);
+
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState(__dirname + '/../auth_session');
+
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`WA Version: v${version.join('.')}, isLatest: ${isLatest}`);
+
+    const sock = makeWASocket({
+        version,
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: false,
+        auth: state,
+        browser: [config.botName, "Chrome", "1.0.0"]
+    });
+
+    const batcher = new MessageBatcher(3000, async (chatId, batch) => {
+        const universalMessages = batch.map(b => b.universalMsg);
+        const lastRawMsg = batch[batch.length - 1].rawMsg;
+        const lastUniversalMsg = universalMessages[universalMessages.length - 1];
+        
+        const log = logger.with(lastUniversalMsg);
+        log.info('WA_GATEWAY', `${batch.length} messages are being sent to AI...`);
+
+        try {
+            const response = await core.sendMessage(universalMessages);
+            if (!response) return;
+
+            if (response.systemAction) {
+                log.info('WA_GATEWAY', `system action: ${response.systemAction}`);
+                await executeAction('system_ux', { actionType: response.systemAction, data: response.systemPayload }, { sock, universalMsg: lastUniversalMsg, rawMsg: lastRawMsg, log });
+                return; 
+            }
+
+            // process texts
+            if (response.text) {
+                if (config.readOnly) {
+                    log.warn('WA_GATEWAY', `[READ-ONLY MODE] Message Sending Blocked: ${response.text.substring(0, 50)}...`);
+                } else {
+                    await sock.sendPresenceUpdate('composing', chatId);
+                    setTimeout(async () => {
+                        await sock.sendPresenceUpdate('paused', chatId);
+                        // quote last msg
+                        await sock.sendMessage(chatId, { text: response.text }, { quoted: lastRawMsg });
+                        log.success('WA_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
+                    }, 1500);
+                }
+            }
+
+            // process actiıns
+            if (response.actions && response.actions.length > 0) {
+                for (const action of response.actions) {
+                    if (config.readOnly) {
+                        log.warn('WA_GATEWAY', `[READ-ONLY MODE] Action Sending Blocked: ${action.type}`);
+                    } else {
+                        log.info('WA_GATEWAY', `Action : ${action.type}`);
+                        await executeAction(action.type, action.payload, { sock, universalMsg: lastUniversalMsg, rawMsg: lastRawMsg, log });
+                    }
+                }
+            }
+        } catch (error) {
+            log.error('WA_GATEWAY', 'Unable to connect Core:', error.message);
+        }
+    });
+
+    // connection
+    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        if (qr) {
+            logger.info("WA_GATEWAY", "Please scan the QR Code:");
+            qrcode.generate(qr, { small: true });
+        }
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) connectToWhatsApp();
+        } else if (connection === 'open') {
+            logger.success('WA_GATEWAY', 'Connected to WhatsApp successfully!');
+        }
+    });
+
+    // msg listener
+    sock.ev.on('messages.upsert', async (m) => {
+        const rawMsg = m.messages[0];
+        if (!rawMsg.message || rawMsg.key.fromMe) return;
+
+        saveToScreenCache(rawMsg);
+
+        const universalMsg = await parseBaileysMessage(rawMsg, config.platform, logger);
+        if (!universalMsg) return;
+
+        const tempLog = logger.with(universalMsg);
+        tempLog.info('WA_GATEWAY', `[Added to queue]: ${universalMsg.text.substring(0, maxLogLength)}`);
+
+        
+
+        batcher.add(universalMsg.chatId, universalMsg, rawMsg);
+    });
+}
+
+connectToWhatsApp();
+</file>
+
+<file path="package.json">
+{
+  "name": "jonquil",
+  "version": "0.3.0",
+  "description": "Autonomous AI agent core. Platform-agnostic intelligence for the Jonquil Ecosystem.",
+  "main": "index.js",
+  "workspaces": [
+    "core",
+    "gateways/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "release": "commit-and-tag-version",
+    "setup": "npx prisma generate && npx prisma migrate deploy",
+    "dev:core": "npm run dev --workspace=core",
+    "dev:wa": "npm run dev --workspace=gateways/whatsapp",
+    "dev:tg": "npm run dev --workspace=gateways/telegram",
+    "dev:sim": "npm run dev --workspace=gateways/simulator",
+    "dev:web": "npm run dev --workspace=gateways/web"
+  },
+  "keywords": [],
+  "author": "The Jonquil AI Authors",
+  "license": "MIT",
+  "devDependencies": {
+    "commit-and-tag-version": "^13.1.0",
+    "prisma": "^7.9.1"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "better-sqlite3": "^13.0.2"
+  }
+}
+</file>
+
+<file path="core/src/ai/index.js">
+const fs = require('fs');
+const path = require('path');
+const logger = require('@jonquil-ai/logger');
+const { UniversalResponse } = require('@jonquil-ai/shared');
+
+const { getSchemasForPlatform, executeCapability } = require('../tools');
+
+const providerName = process.env.ACTIVE_PROVIDER || 'gemini';
+const activeProvider = require(`./providers/${providerName}`);
+
+const { getSessionHistory, saveToSession } = require('./memory');
+const ContextBuilder = require('./contextBuilder');
+
+const maxLogLength = process.env.MAX_LOG_LENGTH || 100;
+
+function parseAIOutput(rawOutput) {
+    if (!rawOutput) return { thought: null, text: null, isSilent: true };
+
+    let text = rawOutput;
+    let thought = null;
+
+    const thoughtMatch = text.match(/<thought>([\s\S]*?)<\/thought>/);
+    if (thoughtMatch) {
+        thought = thoughtMatch[1].trim();
+        text = text.replace(/<thought>[\s\S]*?<\/thought>/, '').trim();
+    }
+
+    const isSilent = text === '<SILENCE>' || text === '';
+    if (isSilent) text = null;
+
+    return { thought, text, isSilent };
+}
+
+async function handleMessageWithAI(universalMessages) {
+    const messages = Array.isArray(universalMessages) ? universalMessages : [universalMessages];
+
+    const lastMsg = messages[messages.length - 1];
+    const log = logger.with(lastMsg);
+    const availableSchemas = getSchemasForPlatform(lastMsg.platform);
+
+    const systemInstruction = ContextBuilder.buildSystemInstruction(lastMsg.platform, lastMsg.timestamp, lastMsg.personaSettings);
+    const sessionHistory = getSessionHistory(lastMsg.chatId);
+
+    const history = [
+        { role: "system", content: systemInstruction },
+        ...sessionHistory
+    ];
+
+    const newTurns = [];
+    for (const msg of messages) {
+        const userPrompt = ContextBuilder.buildUserPrompt(msg);
+        const userMedia = ContextBuilder.extractUserMedia(msg);
+
+        const turn = { role: "user", content: userPrompt, media: userMedia };
+        history.push(turn);
+        newTurns.push(turn);
+    }
+
+    log.dump('AI INPUT (HISTORY)', history);
+    log.info('AI', `Incoming Request: ${messages.length} message(s) received.`);
+
+    let loopCount = 0;
+    const MAX_LOOPS = process.env.AI_MAX_LOOPS || 3;
+    const pendingGatewayActions = [];
+
+    while (loopCount < MAX_LOOPS) {
+        const aiResponse = await activeProvider.generate(history, availableSchemas);
+        log.dump(`AI OUTPUT (LOOP ${loopCount + 1})`, aiResponse);
+
+        if (aiResponse.text && (!aiResponse.toolCalls || aiResponse.toolCalls.length === 0)) {
+            const { thought, text, isSilent } = parseAIOutput(aiResponse.text);
+
+            if (thought) log.debug('AI_THOUGHT', `Jonquil Thought: ${thought}`);
+
+            newTurns.push({ role: 'assistant', content: aiResponse.text });
+
+            saveToSession(lastMsg.chatId, newTurns);
+
+            if (isSilent) {
+                log.info('AI', `Jonquil didn't speak.`);
+                return new UniversalResponse({ text: null, actions: pendingGatewayActions });
+            }
+
+            log.success('AI', `Jonquil Response: ${text.substring(0, maxLogLength).replace(/\n/g, ' ')}...`);
+            return new UniversalResponse({ text: text, actions: pendingGatewayActions });
+        }
+
+        if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+            const assistantToolTurn = {
+                role: 'assistant',
+                content: aiResponse.text || "",
+                toolCalls: aiResponse.toolCalls
+            };
+            history.push(assistantToolTurn);
+            newTurns.push(assistantToolTurn);
+
+            for (const call of aiResponse.toolCalls) {
+                log.info('AI', `Tool call: ${call.name}`);
+
+                const apiResult = await executeCapability(call.name, call.args, lastMsg);
+
+                let toolContent;
+                if (apiResult.gatewayAction) {
+                    pendingGatewayActions.push(apiResult.gatewayAction);
+
+                    // Preserve tool output
+                    const { gatewayAction, ...restData } = apiResult;
+                    toolContent = { success: true, ...restData };
+                } else {
+                    toolContent = apiResult;
+                }
+
+                const toolTurn = { role: 'tool', id: call.id, name: call.name, content: toolContent };
+
+                history.push(toolTurn);
+                newTurns.push(toolTurn);
+            }
+        }
+        loopCount++;
+    }
+
+    saveToSession(lastMsg.chatId, newTurns);
+    return new UniversalResponse({ text: "I've done too much work and I'm tired right now, please ask again.", actions: pendingGatewayActions });
+}
+
+module.exports = handleMessageWithAI;
+</file>
+
+</files>

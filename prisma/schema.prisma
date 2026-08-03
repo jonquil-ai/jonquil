@@ -1,0 +1,42 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x", "windows"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               Int                @id @default(autoincrement())
+  uid              String             @unique // Eski jqid. Örn: guest_telegram_123
+  role             String             @default("GUEST") 
+  personaSettings  String?            
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  identities       PlatformIdentity[]
+  tosAcceptances   TosAcceptance[]
+}
+
+model PlatformIdentity {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  platform  String   
+  realId    String   
+  maskedId  String?  
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([platform, realId])
+}
+
+model TosAcceptance {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  platform    String   
+  groupId     String?  
+  acceptedAt  DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
