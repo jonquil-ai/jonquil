@@ -71,3 +71,9 @@ models/
 # ========================
 auth_session/
 *.log
+
+/generated/prisma
+# Logs & Temp
+/logs/
+/temp/
+/generated/prisma
