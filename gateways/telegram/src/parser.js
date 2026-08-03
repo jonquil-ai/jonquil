@@ -1,3 +1,4 @@
+const { detectSystemEvent } = require('./intents');
 const { UniversalMessage } = require('@jonquil-ai/shared');
 const axios = require('axios');
 
@@ -81,11 +82,12 @@ async function parseTelegramMessage(ctx, platformName) {
         });
     }
 
+    const systemEvent = detectSystemEvent(text);
+
     return new UniversalMessage({
-        platform: platformName,
-        messageId, chatId, senderId, senderName, isGroup, text, 
-        hasMedia, mediaType, mediaData, mediaMime,
-        quotedMessage, mentions, timestamp
+        platform: platformName, messageId, chatId, senderId, senderName, isGroup, text, 
+        hasMedia, mediaType, mediaData, mediaMime, quotedMessage, mentions, timestamp,
+        systemEvent
     });
 }
 
