@@ -4,8 +4,7 @@
  * to the CORE (Jonquil) service.
  */
 class UniversalMessage {
-    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, mediaData = null, mediaMime = null, mediaType = null, quotedMessage = null, mentions = [], timestamp = null }) {
-        this.platform = platform;
+    constructor({ platform, messageId, chatId, senderId, senderName, isGroup, text, hasMedia = false, mediaData = null, mediaMime = null, mediaType = null, quotedMessage = null, mentions = [], timestamp = null, systemEvent = null }) {        this.platform = platform;
         this.messageId = messageId;
         this.chatId = chatId;
         this.senderId = senderId;
@@ -19,14 +18,17 @@ class UniversalMessage {
         this.quotedMessage = quotedMessage;
         this.mentions = mentions;
         this.timestamp = timestamp || new Date().toISOString();
+        this.systemEvent = systemEvent;
     }
-    isEmpty() { return !this.text && !this.hasMedia; }
+    isEmpty() { return !this.text && !this.hasMedia && !this.systemEvent; }
 }
 
 class UniversalResponse {
-    constructor({ text = null, actions = [] }) {
+    constructor({ text = null, actions = [], systemAction = null, systemPayload = null }) {
         this.text = text;
         this.actions = actions;
+        this.systemAction = systemAction;
+        this.systemPayload = systemPayload; 
     }
 }
 
@@ -92,9 +94,23 @@ class MessageBatcher {
     }
 }
 
+
+const SystemEvents = {
+    TOS_APPROVE: 'TOS_APPROVE'
+};
+
+const SystemActions = {
+    SHOW_TOS_PROMPT_DM: 'SHOW_TOS_PROMPT_DM',
+    SHOW_TOS_PROMPT_GROUP: 'SHOW_TOS_PROMPT_GROUP',
+    TOS_APPROVED_SUCCESS: 'TOS_APPROVED_SUCCESS',
+    IGNORE: 'IGNORE'
+};
+
 module.exports = {
     UniversalMessage,
     UniversalResponse,
     CoreClient,
-    MessageBatcher
+    MessageBatcher,
+    SystemEvents,
+    SystemActions
 };
