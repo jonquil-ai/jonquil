@@ -2,26 +2,6 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
-## [0.4.0](https://github.com/jonquil-ai/jonquil/compare/v0.3.0...v0.4.0) (2026-08-03)
-
-### Features
-
-* **ai:** inject user role and dynamic persona into context builder ([0369ba7](https://github.com/jonquil-ai/jonquil/commit/0369ba77eb19c06861e972284871b0c7379e599f))
-* **apps:** add tos consent modal and handle system events to web client ([80d363f](https://github.com/jonquil-ai/jonquil/commit/80d363f38dcd31d7f23b1b8dde34dc34126762b8))
-* **config:** add new configs to .env example file ([9873fae](https://github.com/jonquil-ai/jonquil/commit/9873fae66572c04d6f406e021ade1a358bbbd208))
-* **core:** implement identity resolver and tos enforcement layer ([e00e52e](https://github.com/jonquil-ai/jonquil/commit/e00e52edcb23b5a5d5c41a3d9cbb03369e2ed458))
-* **db:** integrate prisma with sqlite and create initial schema ([aa114c6](https://github.com/jonquil-ai/jonquil/commit/aa114c6823fe95bc9ee2a743b0103d0dc82cc709))
-* **db:** Multi-Tenant Identity and TOS Enforcement Layer ([#48](https://github.com/jonquil-ai/jonquil/issues/48)) ([df2b074](https://github.com/jonquil-ai/jonquil/commit/df2b074538a1f4d1cffd5507befbb27ed7d33b2f))
-* **gateways:** implement intent detection and system ux handlers ([6d79ad3](https://github.com/jonquil-ai/jonquil/commit/6d79ad3a217376066da9718bdbe516f8f662f383))
-* **l10n:** add localization package and gateway integration ([#50](https://github.com/jonquil-ai/jonquil/issues/50)) ([2c7bc77](https://github.com/jonquil-ai/jonquil/commit/2c7bc77179b0bfa75df758a404bd457999dad70c))
-* **l10n:** create l10n package with en and tr locales ([476e51d](https://github.com/jonquil-ai/jonquil/commit/476e51d4efabe05e152104052d511a721950fdab))
-* **l10n:** localize system ux prompts using l10n package ([8215c6d](https://github.com/jonquil-ai/jonquil/commit/8215c6dee01cc6e10923eba8cee020101ae9537b))
-* **shared:** add system actions and events to universal dto ([feccdf5](https://github.com/jonquil-ai/jonquil/commit/feccdf52e20424e8e6cd2744b7efc7366941e344))
-
-### Bug Fixes
-
-* **wa:** resolve ios tts and music audio playback ([6001f2d](https://github.com/jonquil-ai/jonquil/commit/6001f2dcdbae984f8c3cbe04f7dbd41038d07fba))
-* **wa:** Resolve iOS WhatsApp audio playback failure ([#52](https://github.com/jonquil-ai/jonquil/issues/52)) ([39de71f](https://github.com/jonquil-ai/jonquil/commit/39de71fc9b8f2a361c9bd132a48fe1c98b65f90f))
 ## [0.3.0](https://github.com/jonquil-ai/jonquil/compare/v0.2.0...v0.3.0) (2026-07-31)
 
 ### ⚠ BREAKING CHANGES

@@ -77,17 +77,6 @@
                 </p>
             </div>
         </div>
-
-<!-- TOS Modal -->
-        <div id="tos-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-            <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
-                <div class="text-4xl mb-4">📜</div>
-                <h2 class="text-xl font-bold text-amber-400 mb-2">Terms of Service</h2>
-                <p class="text-sm text-zinc-400 mb-4">To use Jonquil, please read and accept our <a href="#" class="text-amber-400 underline">Terms of Service</a> & Privacy Policy.</p>
-                <button onclick="acceptTos()" class="bg-amber-400 hover:bg-amber-300 text-zinc-950 font-bold px-6 py-3 rounded-xl w-full transition">I Accept</button>
-            </div>
-        </div>
-    
     </main>
 
     <!-- Input Area -->
@@ -272,19 +261,10 @@
                 removeTypingIndicator();
 
                 if (!response.ok || !data.success) {
-                    appendSystemMessage(`⚠️ Error: ${data.error || 'Connection error.'}`);
-                } else if (data.reply.systemAction) {
-                    if (data.reply.systemAction.includes('SHOW_TOS_PROMPT')) {
-                        document.getElementById('tos-modal').classList.remove('hidden');
-                        messageInput.disabled = true;
-                        sendBtn.disabled = true;
-                    } else if (data.reply.systemAction === 'TOS_APPROVED_SUCCESS') {
-                        appendSystemMessage("✅ Terms approved. You can start chatting!");
-                    }
-                } else if (data.reply.text) {
+                    appendSystemMessage(`⚠️ Error: ${data.error || 'Failed to connect to gateway.'}`);
+                } else if (data.reply) {
                     appendAssistantMessage(data.reply.text, data.reply.actions);
                 }
-
             } catch (err) {
                 removeTypingIndicator();
                 appendSystemMessage('⚠️ Connection error. Is Web Gateway running on port 4000?');
@@ -301,32 +281,6 @@
         });
 
         messageInput.focus();
-
-        async function acceptTos() {
-            document.getElementById('tos-modal').classList.add('hidden');
-            createTypingIndicator();
-            
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: "", sessionId: currentSessionId, systemEvent: "TOS_APPROVE" })
-                });
-
-                const data = await response.json();
-                removeTypingIndicator();
-
-                if (data.success && data.reply && data.reply.systemAction === 'TOS_APPROVED_SUCCESS') {
-                    appendSystemMessage("✅ Terms accepted. You can now start chatting!");
-                } else {
-                    appendSystemMessage("⚠️ Failed to accept terms.");
-                }
-            } catch (err) {
-                removeTypingIndicator();
-                appendSystemMessage('⚠️ Connection error.');
-            }
-        }
-        
     </script>
 </body>
 </html>

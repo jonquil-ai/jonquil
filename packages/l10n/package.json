@@ -1,6 +1,0 @@
-{
-    "name": "@jonquil-ai/l10n",
-    "version": "1.0.0",
-    "description": "Localization and language dictionaries for Jonquil Ecosystem",
-    "main": "index.js"
-}

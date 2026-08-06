@@ -1,6 +1,6 @@
 {
   "name": "jonquil",
-  "version": "0.4.0",
+  "version": "0.3.0",
   "description": "Autonomous AI agent core. Platform-agnostic intelligence for the Jonquil Ecosystem.",
   "main": "index.js",
   "workspaces": [
@@ -11,7 +11,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "release": "commit-and-tag-version",
-    "setup": "npx prisma generate && npx prisma migrate deploy",
     "dev:core": "npm run dev --workspace=core",
     "dev:wa": "npm run dev --workspace=gateways/whatsapp",
     "dev:tg": "npm run dev --workspace=gateways/telegram",
@@ -22,12 +21,6 @@
   "author": "The Jonquil AI Authors",
   "license": "MIT",
   "devDependencies": {
-    "commit-and-tag-version": "^13.1.0",
-    "prisma": "^7.9.1"
-  },
-  "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.9.1",
-    "@prisma/client": "^7.9.1",
-    "better-sqlite3": "^13.0.2"
+    "commit-and-tag-version": "^13.1.0"
   }
 }
