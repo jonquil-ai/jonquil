@@ -30,12 +30,6 @@ const batcher = new MessageBatcher(3000, async (chatId, batch) => {
         const response = await core.sendMessage(universalMessages);
         if (!response) return;
 
-        if (response.systemAction) {
-            log.info('TG_GATEWAY', `system action: ${response.systemAction}`);
-            await executeAction('system_ux', { actionType: response.systemAction, data: response.systemPayload }, { ctx: lastCtx, log });
-            return;
-        }
-
         // text msg
         if (response.text) {
             if (config.readOnly) {

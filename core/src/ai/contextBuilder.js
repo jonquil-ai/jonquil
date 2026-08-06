@@ -6,22 +6,16 @@ const rulesPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'RULES.md'),
 const ghostPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'GHOST.md'), 'utf-8');
 
 class ContextBuilder {
-
-    static buildSystemInstruction(platform, timestamp, personaSettings) {
+    static buildSystemInstruction(platform, timestamp) {
         const dateObj = new Date(timestamp);
         const timeStr = dateObj.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' });
         
         let finalInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n`;
 
-       const isGhostModeEnabled = true; // todo
-       if (isGhostModeEnabled) {
-           finalInstruction += `${ghostPrompt}\n\n`;
-       }
-
-       // inject db persona overrides if present
-       if (personaSettings) {
-           finalInstruction += `[USER SPECIFIC PERSONA SETTINGS]:\n${personaSettings}\n\n`;
-       }
+        const isGhostModeEnabled = true; // todo
+        if (isGhostModeEnabled) {
+            finalInstruction += `${ghostPrompt}\n\n`;
+        }
 
         finalInstruction += `[Current Platform]: ${platform}\n[Current Time]: ${timeStr}`;
         
@@ -42,9 +36,8 @@ class ContextBuilder {
             mediaTag = `\n[Media]: User sent a/an [${universalMessage.mediaType.toUpperCase()}].`;
         }
 
-        const roleTag = universalMessage.role ? ` [Role: ${universalMessage.role}]` : "";
-        
-        return `[MsgID: ${universalMessage.messageId}] [User: ${universalMessage.senderName}]${roleTag} [Environment: ${chatType}]${quoteContext}\n[Message]: ${universalMessage.text}${mediaTag}`;    }
+        return `[MsgID: ${universalMessage.messageId}] [User: ${universalMessage.senderName}] [Environment: ${chatType}]${quoteContext}\n[Message]: ${universalMessage.text}${mediaTag}`;
+    }
 
     static extractUserMedia(universalMessage) {
         if (universalMessage.hasMedia) {

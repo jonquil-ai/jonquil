@@ -122,7 +122,7 @@ module.exports = {
                         payload: {
                             mediaType: 'audio',
                             url: cleanedTrack.previewUrl,
-                            mimeType: 'audio/mp4', // apple default -> M4A / AAC
+                            mimeType: 'audio/mp3',
                             caption: `🎵 **${cleanedTrack.name}**\n🎤 **${cleanedTrack.artist}**\n💿 ${cleanedTrack.album || 'Single'} (${cleanedTrack.year})`
                         }
                     }
