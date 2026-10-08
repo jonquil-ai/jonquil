@@ -9,7 +9,7 @@ class ContextBuilder {
     static buildSystemInstruction(platform, timestamp) {
         const dateObj = new Date(timestamp);
         const timeStr = dateObj.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' });
-        
+
         let finalInstruction = `${soulPrompt}\n\n${rulesPrompt}\n\n`;
 
         const isGhostModeEnabled = true; // todo
@@ -18,33 +18,39 @@ class ContextBuilder {
         }
 
         finalInstruction += `[Current Platform]: ${platform}\n[Current Time]: ${timeStr}`;
-        
+
         return finalInstruction;
     }
 
-    static buildUserPrompt(universalMessage) {
-        const chatType = universalMessage.isGroup ? "Group Chat" : "Direct Message (DM)";
-        
+    static buildUserPrompt(event) {
+        const isGroup = event.chat?.isGroup ?? event.isGroup ?? false;
+        const chatType = isGroup ? "Group Chat" : "Direct Message (DM)";
+        const senderName = event.author?.name || event.senderName || "Unknown";
+        const messageId = event.id || event.messageId || "---";
+        const text = event.message?.text || event.text || "";
+
         let quoteContext = "";
-        if (universalMessage.quotedMessage) {
-            let qMediaTag = universalMessage.quotedMessage.hasMedia ? ` [Attached Media: ${universalMessage.quotedMessage.mediaType}]` : "";
-            quoteContext = `\n(Quoted MsgID: ${universalMessage.quotedMessage.messageId} | ${universalMessage.quotedMessage.senderName}): "${universalMessage.quotedMessage.text}"${qMediaTag}`;
+        if (event.reference?.replyToId) {
+            quoteContext = `\n(Replying to MsgID: ${event.reference.replyToId})`;
+        } else if (event.quotedMessage) {
+            quoteContext = `\n(Quoted MsgID: ${event.quotedMessage.messageId} | ${event.quotedMessage.senderName}): "${event.quotedMessage.text}"`;
         }
 
         let mediaTag = "";
-        if (universalMessage.hasMedia) {
-            mediaTag = `\n[Media]: User sent a/an [${universalMessage.mediaType.toUpperCase()}].`;
+        const mediaType = event.media?.type || event.mediaType;
+        if (mediaType) {
+            mediaTag = `\n[Media]: User sent a/an [${mediaType.toUpperCase()}].`;
         }
 
-        return `[MsgID: ${universalMessage.messageId}] [User: ${universalMessage.senderName}] [Environment: ${chatType}]${quoteContext}\n[Message]: ${universalMessage.text}${mediaTag}`;
+        return `[MsgID: ${messageId}] [User: ${senderName}] [Environment: ${chatType}]${quoteContext}\n[Message]: ${text}${mediaTag}`;
     }
 
-    static extractUserMedia(universalMessage) {
-        if (universalMessage.hasMedia) {
-            return { data: universalMessage.mediaData, mimeType: universalMessage.mediaMime };
+    static extractUserMedia(event) {
+        if (event.media?.data) {
+            return { data: event.media.data, mimeType: event.media.mime };
         }
-        if (universalMessage.quotedMessage && universalMessage.quotedMessage.hasMedia) {
-            return { data: universalMessage.quotedMessage.mediaData, mimeType: universalMessage.quotedMessage.mediaMime };
+        if (event.mediaData) {
+            return { data: event.mediaData, mimeType: event.mediaMime };
         }
         return null;
     }
