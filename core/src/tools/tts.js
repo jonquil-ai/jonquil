@@ -17,11 +17,15 @@ module.exports = {
     },
     execute: async (args, messageContext) => {
         logger.info('ACTION', `tts running... Text: ${args.text.substring(0, 20)}...`);
+        const targetId = messageContext.id;
+
         return {
             success: true,
             gatewayAction: {
                 type: 'tts',
-                payload: { text: args.text, lang: args.lang, targetId: messageContext.messageId }
+                mimetype: 'audio/mpeg', // todo -> convert to ogg opus with ffmpeg for PTT support
+                ptt: false, // ogg
+                payload: { text: args.text, lang: args.lang || 'tr', targetId }
             }
         };
     }
