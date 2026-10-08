@@ -64,6 +64,7 @@ class UnifiedEvent {
 
         this.chat = data.chat ? {
             id: data.chat.id || null,
+            name: data.chat.name || null,
             isGroup: data.chat.isGroup || false,
         } : undefined;
         
@@ -147,7 +148,74 @@ class UnifiedEvent {
     }
 }
 
+
+/**
+ * CORE CLIENT
+ * Desc
+ */
+class CoreClient {
+    constructor(url) {
+        this.url = url;
+    }
+
+    async sendMessage(payload) {
+        try {
+            const response = await fetch(this.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            return data.reply; // returns -> { text, actions } 
+        } catch (error) {
+            console.error('[CORE_CLIENT] Error communicating with Core:', error.message);
+            return null;
+        }
+    }
+}
+
+/**
+ * MESSAGE BATCHER
+ * Desc
+ */
+class MessageBatcher {
+    constructor(delayMs, callback) {
+        this.delayMs = delayMs;
+        this.callback = callback;
+        this.batches = new Map();
+        this.timers = new Map();
+    }
+
+    add(chatId, item) {
+        if (!this.batches.has(chatId)) {
+            this.batches.set(chatId, []);
+        }
+        this.batches.get(chatId).push(item);
+
+        if (this.timers.has(chatId)) {
+            clearTimeout(this.timers.get(chatId));
+        }
+
+        this.timers.set(chatId, setTimeout(() => {
+            const batch = this.batches.get(chatId);
+            this.batches.delete(chatId);
+            this.timers.delete(chatId);
+            this.callback(chatId, batch);
+        }, this.delayMs));
+    }
+}
+
+class UniversalResponse {
+    constructor({ text = null, actions = [] } = {}) {
+        this.text = text;
+        this.actions = actions;
+    }
+}
+
 module.exports = {
     EventTypes,
-    UnifiedEvent
+    UnifiedEvent,
+    CoreClient,
+    MessageBatcher,
+    UniversalResponse
 };
