@@ -2,7 +2,7 @@ module.exports = {
     name: 'react',
     execute: async (payload, { sock, universalMsg, log }) => {
         try {
-            await sock.sendMessage(universalMsg.chatId, {
+            await sock.sendMessage(universalMsg.chat.id, {
                 react: {
                     text: payload.emoji,
                     key: {

@@ -12,7 +12,7 @@ module.exports = {
             const buffer = Buffer.from(response.data);
 
             await sock.sendMessage(
-                universalMsg.chatId, 
+                universalMsg.chat.id, 
                 {
                     audio: buffer,
                     mimetype: 'audio/ogg; codecs=opus',
