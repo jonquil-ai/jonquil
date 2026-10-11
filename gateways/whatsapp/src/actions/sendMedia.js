@@ -5,6 +5,7 @@ module.exports = {
             log.info('ACTION', `Sending media (${payload.mediaType || 'image'})...`);
             
             const mediaType = payload.mediaType || 'image';
+            let mimeType = payload.mimeType || payload.mimetype;
             const caption = payload.caption || "";
             let mediaContent = {};
 
@@ -20,7 +21,7 @@ module.exports = {
 
             if (caption) mediaContent.caption = caption;
 
-            await sock.sendMessage(universalMsg.chatId, mediaContent, { quoted: rawMsg });
+            await sock.sendMessage(universalMsg.chat.id, mediaContent, { quoted: rawMsg });
             log.success('ACTION', `Media (${mediaType}) sent successfully.`);
         } catch (error) {
             log.error('ACTION', 'send_media error:', error.message);

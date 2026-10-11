@@ -37,7 +37,7 @@ module.exports = {
                 .webp()
                 .toBuffer();
 
-            await sock.sendMessage(universalMsg.chatId, { sticker: stickerBuffer });
+            await sock.sendMessage(universalMsg.chat.id, { sticker: stickerBuffer });
             log.success('ACTION', 'The sticker was successfully created and sent!');
         } catch (error) {
             log.error('ACTION', 'Sticker error:', error.message);

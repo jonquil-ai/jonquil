@@ -19,15 +19,15 @@ if (!process.env.TG_BOT_TOKEN) {
 const bot = new Telegraf(process.env.TG_BOT_TOKEN);
 
 const batcher = new MessageBatcher(3000, async (chatId, batch) => {
-    const universalMessages = batch.map(b => b.universalMsg);
+    const unifiedEvents = batch.map(b => b.unifiedEvent);
     const lastCtx = batch[batch.length - 1].rawMsg;
-    const lastUniversalMsg = universalMessages[universalMessages.length - 1];
+    const lastEvent = unifiedEvents[unifiedEvents.length - 1];
 
-    const log = logger.with(lastUniversalMsg);
+    const log = logger.with(lastEvent);
     log.info('TG_GATEWAY', `${batch.length} messages are being sent to AI...`);
 
     try {
-        const response = await core.sendMessage(universalMessages);
+        const response = await core.sendMessage(unifiedEvents);
         if (!response) return;
 
         // text msg
@@ -35,10 +35,8 @@ const batcher = new MessageBatcher(3000, async (chatId, batch) => {
             if (config.readOnly) {
                 log.warn('TG_GATEWAY', `[READ-ONLY] Message Sending Blocked: ${response.text.substring(0, 50)}`);
             } else {
-
                 await lastCtx.sendChatAction('typing');
                 setTimeout(async () => {
-                    // quote last msg
                     await lastCtx.reply(response.text, { reply_parameters: { message_id: lastCtx.message.message_id } });
                     log.success('TG_GATEWAY', `Sent: ${response.text.substring(0, maxLogLength)}...`);
                 }, 1500);
@@ -63,16 +61,18 @@ const batcher = new MessageBatcher(3000, async (chatId, batch) => {
 
 // msg listener
 bot.on('message', async (ctx) => {
-    // FIX: Added await here for async parseTelegramMessage
-    const universalMsg = await parseTelegramMessage(ctx, config.platform);
-    if (!universalMsg) return;
+    const unifiedEvent = await parseTelegramMessage(ctx, config.platform);
+    if (!unifiedEvent || (unifiedEvent.isEmpty() && !unifiedEvent.isSystemEvent())) return;
 
-    const tempLog = logger.with(universalMsg);
-    const logPreview = universalMsg.text ? universalMsg.text.substring(0, maxLogLength) : `[Media: ${universalMsg.mediaType || 'audio'}]`;
+    const tempLog = logger.with(unifiedEvent);
+    const textContext = unifiedEvent.message?.text;
+    const logPreview = textContext ? textContext.substring(0, maxLogLength) : `[Media: ${unifiedEvent.media?.type || 'unknown'}]`;
+    
     tempLog.info('TG_GATEWAY', `[Added to queue]: ${logPreview}`);
 
-    batcher.add(universalMsg.chatId, universalMsg, ctx);
+    batcher.add(unifiedEvent.chat.id, { unifiedEvent, rawMsg: ctx });
 });
+
 
 // start bot
 bot.launch(() => {

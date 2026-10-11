@@ -14,19 +14,20 @@ const PORT = process.env.PORT || 3000;
 
 app.post('/api/chat', (req, res) => {
     const incomingData = req.body;
-    let messagesBatch = Array.isArray(incomingData) ? incomingData : [incomingData];
+    let eventsBatch = Array.isArray(incomingData) ? incomingData : [incomingData];
 
-    const validMessages = messagesBatch.filter(m => m && (m.text || m.hasMedia));
+    // message.text or media
+    const validEvents = eventsBatch.filter(e => e && (e.message?.text || e.media?.type || e.text));
     
-    if (validMessages.length === 0) {
-        return res.status(400).json({ error: "Invalid message format" });
+    if (validEvents.length === 0) {
+        return res.status(400).json({ error: "Invalid event format" });
     }
 
-    const chatId = validMessages[0].chatId;
+    const chatId = validEvents[0].chat?.id || validEvents[0].chatId;
 
     enqueueTask(chatId, async () => {
         try {
-            const replyObj = await handleMessageWithAI(validMessages);
+            const replyObj = await handleMessageWithAI(validEvents);
             res.json({ success: true, reply: replyObj });
         } catch (error) {
             logger.error('CORE', 'Server error', error);

@@ -25,21 +25,24 @@ const printObjects = (args) => {
     });
 };
 
+
+const getPrefix = (context) => {
+    if (!context) return "";
+    
+    const name = context.author?.name || 'unknown';
+    const rawId = context.id || null;
+    const id = rawId ? String(rawId).substring(0, 6) : '---';
+    const platform = context.platform || 'cli';
+
+    return `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
+};
+
 const logger = {
 
     _print: (category, color, message, args, context = null) => {
         const textArgs = args.filter(a => typeof a !== 'object').join(' ');
         const finalMessage = textArgs ? `${message} ${textArgs}` : message;
-
-        let prefix = "";
-
-        if (context) {
-            
-            const name = context.senderName || 'unknown';
-            const platform = context.platform || 'test-cli';
-            const id = context.messageId ? context.messageId.substring(0, 6) : '---';
-            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
-        }
+        const prefix = getPrefix(context);
 
         console.log(`${timestamp()} ${tag(category, color)} ${prefix}${finalMessage}`);
         
@@ -57,16 +60,9 @@ const logger = {
     },
 
     dump: (title, data, contextObj = null) => {
-
         if (process.env.AI_DEBUG_MODE !== 'true') return; 
 
-        let prefix = "";
-        if (contextObj) {
-            const name = contextObj.senderName || 'unknown';
-            const platform = contextObj.platform || 'cli';
-            const id = contextObj.messageId ? contextObj.messageId.substring(0, 6) : '---';
-            prefix = `\x1b[36m[${name} | ${id} | ${platform}]\x1b[0m `;
-        }
+        const prefix = getPrefix(contextObj);
 
         console.log(`\n${colors.magenta}┌── DEBUG DUMP: ${title.toUpperCase()} ─────────────────────────────${colors.reset}`);
         console.log(`${prefix}`);

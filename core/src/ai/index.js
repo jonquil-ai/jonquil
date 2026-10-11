@@ -33,13 +33,15 @@ function parseAIOutput(rawOutput) {
 
 async function handleMessageWithAI(universalMessages) {
     const messages = Array.isArray(universalMessages) ? universalMessages : [universalMessages];
-    
+
     const lastMsg = messages[messages.length - 1];
     const log = logger.with(lastMsg);
     const availableSchemas = getSchemasForPlatform(lastMsg.platform);
 
     const systemInstruction = ContextBuilder.buildSystemInstruction(lastMsg.platform, lastMsg.timestamp);
-    const sessionHistory = getSessionHistory(lastMsg.chatId);
+
+    const chatId = lastMsg.chat?.id || lastMsg.chatId;
+    const sessionHistory = getSessionHistory(chatId);
 
     const history = [
         { role: "system", content: systemInstruction },
@@ -50,7 +52,7 @@ async function handleMessageWithAI(universalMessages) {
     for (const msg of messages) {
         const userPrompt = ContextBuilder.buildUserPrompt(msg);
         const userMedia = ContextBuilder.extractUserMedia(msg);
-        
+
         const turn = { role: "user", content: userPrompt, media: userMedia };
         history.push(turn);
         newTurns.push(turn);
@@ -74,7 +76,7 @@ async function handleMessageWithAI(universalMessages) {
 
             newTurns.push({ role: 'assistant', content: aiResponse.text });
 
-            saveToSession(lastMsg.chatId, newTurns);
+            saveToSession(chatId, newTurns);
 
             if (isSilent) {
                 log.info('AI', `Jonquil didn't speak.`);
@@ -86,10 +88,10 @@ async function handleMessageWithAI(universalMessages) {
         }
 
         if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
-            const assistantToolTurn = { 
-                role: 'assistant', 
-                content: aiResponse.text || "", 
-                toolCalls: aiResponse.toolCalls 
+            const assistantToolTurn = {
+                role: 'assistant',
+                content: aiResponse.text || "",
+                toolCalls: aiResponse.toolCalls
             };
             history.push(assistantToolTurn);
             newTurns.push(assistantToolTurn);
@@ -102,7 +104,7 @@ async function handleMessageWithAI(universalMessages) {
                 let toolContent;
                 if (apiResult.gatewayAction) {
                     pendingGatewayActions.push(apiResult.gatewayAction);
-                    
+
                     // Preserve tool output
                     const { gatewayAction, ...restData } = apiResult;
                     toolContent = { success: true, ...restData };
@@ -119,7 +121,7 @@ async function handleMessageWithAI(universalMessages) {
         loopCount++;
     }
 
-    saveToSession(lastMsg.chatId, newTurns);
+    saveToSession(chatId, newTurns);
     return new UniversalResponse({ text: "I've done too much work and I'm tired right now, please ask again.", actions: pendingGatewayActions });
 }
 

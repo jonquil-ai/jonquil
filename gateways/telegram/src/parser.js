@@ -1,4 +1,4 @@
-const { UniversalMessage } = require('@jonquil-ai/shared');
+const { UnifiedEvent, EventTypes } = require('@jonquil-ai/shared');
 const axios = require('axios');
 
 async function fetchTelegramMedia(ctx, fileId) {
@@ -16,76 +16,64 @@ async function parseTelegramMessage(ctx, platformName) {
     const msg = ctx.message;
     if (!msg) return null;
 
-    // metas
+    // 1. root - metas
     const messageId = msg.message_id.toString();
     const chatId = msg.chat.id.toString();
     const senderId = msg.from.id.toString();
     const senderName = msg.from.first_name || msg.from.username || "Guest";
     const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
-
-    // text
-    const text = msg.text || msg.caption || "";
-
-    // media
-    const hasMedia = !!(msg.photo || msg.video || msg.sticker || msg.voice || msg.audio);
-    let mediaType = null;
-    let mediaData = null;
-    let mediaMime = null;
-
-    if (msg.photo) {
-        mediaType = 'image';
-        mediaMime = 'image/jpeg';
-    } else if (msg.video) {
-        mediaType = 'video';
-        mediaMime = 'video/mp4';
-    } else if (msg.sticker) {
-        mediaType = 'sticker';
-        mediaMime = 'image/webp';
-    } else if (msg.voice || msg.audio) {
-        mediaType = 'audio';
-        mediaMime = msg.voice ? 'audio/ogg' : (msg.audio.mime_type || 'audio/mp3');
-        const fileId = msg.voice ? msg.voice.file_id : msg.audio.file_id;
-        mediaData = await fetchTelegramMedia(ctx, fileId);
-    }
-
-    // quoted msg
-    let quotedMessage = null;
-    if (msg.reply_to_message) {
-        const qMsg = msg.reply_to_message;
-        const qHasMedia = !!(qMsg.photo || qMsg.video || qMsg.sticker || qMsg.voice || qMsg.audio);
-        let qMediaType = null;
-        if (qMsg.photo) qMediaType = 'image';
-        else if (qMsg.video) qMediaType = 'video';
-        else if (qMsg.sticker) qMediaType = 'sticker';
-        else if (qMsg.voice || qMsg.audio) qMediaType = 'audio';
-
-        quotedMessage = {
-            messageId: qMsg.message_id.toString(),
-            senderId: qMsg.from.id.toString(),
-            senderName: qMsg.from.id === ctx.botInfo.id ? "Itself" : (qMsg.from.first_name || "Guest"),
-            text: qMsg.text || qMsg.caption || "",
-            mediaType: qMediaType
-        };
-    }
-
     const timestamp = new Date(msg.date * 1000).toISOString();
 
-    // mentions
+    // 2. text - mentions
+    const text = msg.text || msg.caption || undefined;
     let mentions = [];
     if (msg.entities) {
         msg.entities.forEach(entity => {
             if (entity.type === 'mention') {
-                const mentionText = text.substring(entity.offset, entity.offset + entity.length);
+                const mentionText = (msg.text || msg.caption).substring(entity.offset, entity.offset + entity.length);
                 mentions.push(mentionText);
             }
         });
     }
 
-    return new UniversalMessage({
+    // 3. media
+    let mediaObj = undefined;
+    if (msg.photo || msg.video || msg.sticker || msg.voice || msg.audio) {
+        let type = null, mime = null;
+        if (msg.photo) { type = 'image'; mime = 'image/jpeg'; }
+        else if (msg.video) { type = 'video'; mime = 'video/mp4'; }
+        else if (msg.sticker) { type = 'sticker'; mime = 'image/webp'; }
+        else if (msg.voice || msg.audio) { type = 'audio'; mime = msg.voice ? 'audio/ogg' : (msg.audio.mime_type || 'audio/mp3'); }
+        
+        const fileId = msg.voice ? msg.voice.file_id : (msg.audio ? msg.audio.file_id : (msg.photo ? msg.photo[msg.photo.length - 1].file_id : null));
+        
+        mediaObj = {
+            type: type,
+            mime: mime,
+            data: fileId ? await fetchTelegramMedia(ctx, fileId) : null,
+            isVoiceNote: !!msg.voice
+        };
+    }
+
+    // 4. metadatas - refs
+    let referenceObj = {};
+    if (msg.reply_to_message) {
+        referenceObj.replyToId = msg.reply_to_message.message_id.toString();
+    }
+    if (msg.forward_date) {
+        referenceObj.isForwarded = true;
+    }
+
+    return new UnifiedEvent({
+        id: messageId,
+        type: EventTypes.MSG_USER,
         platform: platformName,
-        messageId, chatId, senderId, senderName, isGroup, text, 
-        hasMedia, mediaType, mediaData, mediaMime,
-        quotedMessage, mentions, timestamp
+        timestamp: timestamp,
+        chat: { id: chatId, isGroup: isGroup },
+        author: { id: senderId, name: senderName },
+        message: text || mentions.length > 0 ? { text: text, mentions: mentions.length > 0 ? mentions : undefined } : undefined,
+        media: mediaObj,
+        reference: Object.keys(referenceObj).length > 0 ? referenceObj : undefined
     });
 }
 
